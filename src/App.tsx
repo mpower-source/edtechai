@@ -7,6 +7,10 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import CreateCourse from "./pages/CreateCourse";
+import Community from "./pages/Community";
+import Cohorts from "./pages/Cohorts";
+import Analytics from "./pages/Analytics";
+import Competitors from "./pages/Competitors";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,7 +26,10 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/create-course" element={<CreateCourse />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/community" element={<Community />} />
+          <Route path="/cohorts" element={<Cohorts />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/competitors" element={<Competitors />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
