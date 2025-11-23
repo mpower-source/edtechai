@@ -1,0 +1,4 @@
+project_id = "zzgjvujggxjcztsxafxs"
+
+[functions.generate-course-outline]
+verify_jwt = true
