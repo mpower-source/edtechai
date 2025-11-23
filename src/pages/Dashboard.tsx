@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, BookOpen, Plus, LogOut, User } from "lucide-react";
+import { Sparkles, BookOpen, Plus, LogOut, User, MessageSquare, Calendar, BarChart3, Target, TrendingUp, Users } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
 type Course = Database["public"]["Tables"]["courses"]["Row"];
@@ -16,10 +16,16 @@ const Dashboard = () => {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [stats, setStats] = useState({
+    totalCourses: 0,
+    totalStudents: 0,
+    totalRevenue: 0,
+  });
 
   useEffect(() => {
     checkUser();
     fetchCourses();
+    fetchStats();
   }, []);
 
   const checkUser = async () => {
@@ -62,6 +68,25 @@ const Dashboard = () => {
     } else {
       setCourses(data || []);
     }
+  };
+
+  const fetchStats = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data: courses } = await supabase
+      .from("courses")
+      .select("price, enrolled_count")
+      .eq("creator_id", session.user.id);
+
+    const totalRevenue = courses?.reduce((sum, c) => sum + (c.price || 0) * (c.enrolled_count || 0), 0) || 0;
+    const totalStudents = courses?.reduce((sum, c) => sum + (c.enrolled_count || 0), 0) || 0;
+
+    setStats({
+      totalCourses: courses?.length || 0,
+      totalStudents,
+      totalRevenue,
+    });
   };
 
   const handleSignOut = async () => {
@@ -118,33 +143,49 @@ const Dashboard = () => {
               <BookOpen className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{courses.length}</div>
+              <div className="text-2xl font-bold">{stats.totalCourses}</div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Published</CardTitle>
-              <BookOpen className="h-4 w-4 text-success" />
+              <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {courses.filter(c => c.status === "published").length}
-              </div>
+              <div className="text-2xl font-bold">{stats.totalStudents}</div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Drafts</CardTitle>
-              <BookOpen className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {courses.filter(c => c.status === "draft").length}
-              </div>
+              <div className="text-2xl font-bold">฿{stats.totalRevenue.toLocaleString()}</div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Feature Navigation */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => navigate("/community")}>
+            <MessageSquare className="h-6 w-6" />
+            <span>Community</span>
+          </Button>
+          <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => navigate("/cohorts")}>
+            <Calendar className="h-6 w-6" />
+            <span>Cohorts</span>
+          </Button>
+          <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => navigate("/analytics")}>
+            <BarChart3 className="h-6 w-6" />
+            <span>Analytics</span>
+          </Button>
+          <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => navigate("/competitors")}>
+            <Target className="h-6 w-6" />
+            <span>Competitors</span>
+          </Button>
         </div>
 
         {/* Create Course Section */}
