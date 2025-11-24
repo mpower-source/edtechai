@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
 import { Sparkles, BookOpen, Users, TrendingUp } from "lucide-react";
+import { StudentChatbot } from "@/components/StudentChatbot";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -175,6 +176,8 @@ const Index = () => {
           <p>&copy; 2025 EdTech Platform. Built with Lovable.</p>
         </div>
       </footer>
+
+      <StudentChatbot />
     </div>
   );
 };

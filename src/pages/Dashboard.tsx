@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, BookOpen, Plus, LogOut, User, MessageSquare, Calendar, BarChart3, Target, TrendingUp, Users } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
+import { StudentChatbot } from "@/components/StudentChatbot";
 
 type Course = Database["public"]["Tables"]["courses"]["Row"];
 
@@ -266,6 +267,8 @@ const Dashboard = () => {
           )}
         </div>
       </div>
+
+      <StudentChatbot />
     </div>
   );
 };

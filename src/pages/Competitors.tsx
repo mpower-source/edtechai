@@ -75,21 +75,20 @@ const Competitors = () => {
   const analyzeCompetitors = async () => {
     setAiAnalyzing(true);
     
-    const competitorData = competitors.map(c => `${c.name}: ${c.pricing} - ${c.notes}`).join('\n');
-    
     try {
-      const { data, error } = await supabase.functions.invoke("generate-course-outline", {
-        body: { 
-          courseTitle: `Analyze these competitors and suggest positioning strategies:\n${competitorData}` 
-        },
+      const { data, error } = await supabase.functions.invoke("competitor-analysis", {
+        body: { competitors },
       });
 
       if (error) throw error;
 
       toast({
         title: "AI Analysis Complete",
-        description: data.description.substring(0, 200) + "...",
+        description: "Check the results below",
       });
+      
+      // Show results in a modal or update UI with analysis
+      console.log("Analysis:", data.analysis);
     } catch (error: any) {
       toast({
         title: "AI Analysis Failed",
