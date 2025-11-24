@@ -318,6 +318,7 @@ export type Database = {
       }
       lessons: {
         Row: {
+          assignment_content: string | null
           content: string | null
           course_id: string
           created_at: string | null
@@ -327,11 +328,15 @@ export type Database = {
           is_free: boolean | null
           lesson_type: Database["public"]["Enums"]["lesson_type"] | null
           order_index: number
+          quiz_content: string | null
+          text_content: string | null
           title: string
           updated_at: string | null
+          video_content: string | null
           video_url: string | null
         }
         Insert: {
+          assignment_content?: string | null
           content?: string | null
           course_id: string
           created_at?: string | null
@@ -341,11 +346,15 @@ export type Database = {
           is_free?: boolean | null
           lesson_type?: Database["public"]["Enums"]["lesson_type"] | null
           order_index: number
+          quiz_content?: string | null
+          text_content?: string | null
           title: string
           updated_at?: string | null
+          video_content?: string | null
           video_url?: string | null
         }
         Update: {
+          assignment_content?: string | null
           content?: string | null
           course_id?: string
           created_at?: string | null
@@ -355,8 +364,11 @@ export type Database = {
           is_free?: boolean | null
           lesson_type?: Database["public"]["Enums"]["lesson_type"] | null
           order_index?: number
+          quiz_content?: string | null
+          text_content?: string | null
           title?: string
           updated_at?: string | null
+          video_content?: string | null
           video_url?: string | null
         }
         Relationships: [
