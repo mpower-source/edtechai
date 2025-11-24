@@ -91,7 +91,10 @@ const Lessons = () => {
         .update({
           title: editingLesson.title,
           description: editingLesson.description,
-          content: editingLesson.content,
+          text_content: (editingLesson as any).text_content,
+          video_content: (editingLesson as any).video_content,
+          quiz_content: (editingLesson as any).quiz_content,
+          assignment_content: (editingLesson as any).assignment_content,
           lesson_type: editingLesson.lesson_type,
           duration_minutes: editingLesson.duration_minutes,
         })
@@ -110,7 +113,10 @@ const Lessons = () => {
         course_id: id,
         title: editingLesson.title,
         description: editingLesson.description,
-        content: editingLesson.content,
+        text_content: (editingLesson as any).text_content,
+        video_content: (editingLesson as any).video_content,
+        quiz_content: (editingLesson as any).quiz_content,
+        assignment_content: (editingLesson as any).assignment_content,
         lesson_type: editingLesson.lesson_type || "text",
         duration_minutes: editingLesson.duration_minutes || 30,
         order_index: editingLesson.order_index ?? lessons.length,
@@ -164,10 +170,10 @@ const Lessons = () => {
       assignment: 'generate-assignment'
     };
 
-    const typeMap: Record<string, LessonType> = {
-      video: 'video' as LessonType,
-      quiz: 'quiz' as LessonType,
-      assignment: 'assignment' as LessonType
+    const contentFieldMap: Record<string, string> = {
+      video: 'video_content',
+      quiz: 'quiz_content',
+      assignment: 'assignment_content'
     };
 
     try {
@@ -181,12 +187,11 @@ const Lessons = () => {
 
       if (error) throw error;
 
-      // Update the lesson with the generated content and change its type
+      // Update the lesson with the generated content in the appropriate column
       const { error: updateError } = await supabase
         .from("lessons")
         .update({
-          content: data.content,
-          lesson_type: typeMap[contentType],
+          [contentFieldMap[contentType]]: data.content,
         })
         .eq("id", lesson.id);
 
@@ -302,15 +307,54 @@ const Lessons = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="content">Content</Label>
+                  <Label htmlFor="text_content">Text Content</Label>
                   <Textarea
-                    id="content"
-                    value={editingLesson.content || ""}
+                    id="text_content"
+                    value={(editingLesson as any).text_content || ""}
                     onChange={(e) =>
-                      setEditingLesson({ ...editingLesson, content: e.target.value })
+                      setEditingLesson({ ...editingLesson, text_content: e.target.value } as any)
                     }
-                    placeholder="Lesson content"
-                    rows={10}
+                    placeholder="Text lesson content"
+                    rows={5}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="video_content">Video Content/Script</Label>
+                  <Textarea
+                    id="video_content"
+                    value={(editingLesson as any).video_content || ""}
+                    onChange={(e) =>
+                      setEditingLesson({ ...editingLesson, video_content: e.target.value } as any)
+                    }
+                    placeholder="Video script content"
+                    rows={5}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="quiz_content">Quiz Content</Label>
+                  <Textarea
+                    id="quiz_content"
+                    value={(editingLesson as any).quiz_content || ""}
+                    onChange={(e) =>
+                      setEditingLesson({ ...editingLesson, quiz_content: e.target.value } as any)
+                    }
+                    placeholder="Quiz content"
+                    rows={5}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="assignment_content">Assignment Content</Label>
+                  <Textarea
+                    id="assignment_content"
+                    value={(editingLesson as any).assignment_content || ""}
+                    onChange={(e) =>
+                      setEditingLesson({ ...editingLesson, assignment_content: e.target.value } as any)
+                    }
+                    placeholder="Assignment content"
+                    rows={5}
                   />
                 </div>
 
