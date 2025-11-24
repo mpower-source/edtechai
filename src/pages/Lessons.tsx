@@ -481,7 +481,6 @@ const Lessons = () => {
                           onClick={() => handleGenerateContent(lesson, 'text')}
                           disabled={generatingContent?.lessonId === lesson.id}
                         >
-                          <FileText className="h-4 w-4 mr-1" />
                           {generatingContent?.type === 'text' && generatingContent?.lessonId === lesson.id 
                             ? "Generating..." 
                             : "Text"}
