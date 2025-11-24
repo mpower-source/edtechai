@@ -159,6 +159,25 @@ const Dashboard = () => {
           </p>
         </div>
 
+        {/* Create Course Section */}
+        <Card className="mb-8 border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Create Your Next Course with AI
+            </CardTitle>
+            <CardDescription>
+              Use AI to generate course outlines, lesson content, and quizzes in minutes
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => navigate("/create-course")} size="lg">
+              <Plus className="mr-2 h-5 w-5" />
+              Create New Course with AI
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Quick Stats */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
           <Card>
@@ -211,25 +230,6 @@ const Dashboard = () => {
             <span>Competitors</span>
           </Button>
         </div>
-
-        {/* Create Course Section */}
-        <Card className="mb-8 border-primary/20 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Create Your Next Course with AI
-            </CardTitle>
-            <CardDescription>
-              Use AI to generate course outlines, lesson content, and quizzes in minutes
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={() => navigate("/create-course")} size="lg">
-              <Plus className="mr-2 h-5 w-5" />
-              Create New Course with AI
-            </Button>
-          </CardContent>
-        </Card>
 
         {/* Courses List */}
         <div>
