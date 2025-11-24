@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, ArrowLeft, Wand2 } from "lucide-react";
+import { AIFeatures } from "@/components/AIFeatures";
 
 const CreateCourse = () => {
   const navigate = useNavigate();
@@ -209,6 +210,24 @@ const CreateCourse = () => {
                 </Button>
               </div>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              More AI Tools
+            </CardTitle>
+            <CardDescription>
+              Use AI to optimize pricing, create marketing content, and get content suggestions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AIFeatures 
+              courseTitle={courseData.title}
+              courseDescription={courseData.description}
+            />
           </CardContent>
         </Card>
 

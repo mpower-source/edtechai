@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, TrendingUp, Users, BookOpen, DollarSign } from "lucide-react";
+import { ArrowLeft, TrendingUp, Users, BookOpen, DollarSign, Sparkles } from "lucide-react";
 
 const Analytics = () => {
   const navigate = useNavigate();
@@ -16,6 +16,8 @@ const Analytics = () => {
     completionRate: 0,
   });
   const [events, setEvents] = useState<any[]>([]);
+  const [aiInsights, setAiInsights] = useState<string>("");
+  const [loadingInsights, setLoadingInsights] = useState(false);
 
   useEffect(() => {
     fetchAnalytics();
@@ -58,6 +60,28 @@ const Analytics = () => {
 
     if (!error) {
       setEvents(data || []);
+    }
+  };
+
+  const generateInsights = async () => {
+    setLoadingInsights(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analytics-insights", {
+        body: { analyticsData: { stats, events: events.slice(0, 5) } },
+      });
+
+      if (error) throw error;
+
+      setAiInsights(data.insights);
+      toast({ title: "AI insights generated!" });
+    } catch (error: any) {
+      toast({
+        title: "Failed to generate insights",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingInsights(false);
     }
   };
 
@@ -114,6 +138,27 @@ const Analytics = () => {
               <div className="text-2xl font-bold">{stats.completionRate.toFixed(1)}%</div>
             </CardContent>
           </Card>
+        </div>
+
+        {aiInsights && (
+          <Card className="mb-8 border-primary/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                AI-Powered Insights
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="whitespace-pre-wrap text-sm">{aiInsights}</div>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="mb-4">
+          <Button onClick={generateInsights} disabled={loadingInsights}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            {loadingInsights ? "Analyzing..." : "Generate AI Insights"}
+          </Button>
         </div>
 
         <Card>

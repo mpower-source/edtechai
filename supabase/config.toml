@@ -2,3 +2,30 @@ project_id = "zzgjvujggxjcztsxafxs"
 
 [functions.generate-course-outline]
 verify_jwt = true
+
+[functions.lesson-content-generator]
+verify_jwt = true
+
+[functions.lesson-summarizer]
+verify_jwt = true
+
+[functions.pricing-suggestions]
+verify_jwt = true
+
+[functions.marketing-headlines]
+verify_jwt = true
+
+[functions.competitor-analysis]
+verify_jwt = true
+
+[functions.analytics-insights]
+verify_jwt = true
+
+[functions.student-chatbot]
+verify_jwt = false
+
+[functions.content-suggestions]
+verify_jwt = true
+
+[functions.send-email]
+verify_jwt = true
