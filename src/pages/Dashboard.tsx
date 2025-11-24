@@ -166,13 +166,16 @@ const Dashboard = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
-                Create Course
+                Create Your Next Course with AI
               </CardTitle>
+              <CardDescription className="text-xs">
+                Use AI to generate course outlines, lesson content, and quizzes in minutes
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Button onClick={() => navigate("/create-course")} size="sm" className="w-full">
                 <Plus className="mr-2 h-4 w-4" />
-                New Course
+                Create New Course with AI
               </Button>
             </CardContent>
           </Card>
