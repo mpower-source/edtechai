@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, BookOpen, Plus, LogOut, User, MessageSquare, Calendar, BarChart3, Target, TrendingUp, Users } from "lucide-react";
+import { Sparkles, BookOpen, Plus, LogOut, User, MessageSquare, Calendar, BarChart3, Target, TrendingUp, Users, Trash2 } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 import { StudentChatbot } from "@/components/StudentChatbot";
 
@@ -93,6 +94,28 @@ const Dashboard = () => {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     navigate("/");
+  };
+
+  const handleDeleteCourse = async (courseId: string, courseTitle: string) => {
+    const { error } = await supabase
+      .from("courses")
+      .delete()
+      .eq("id", courseId);
+
+    if (error) {
+      toast({
+        title: "Error deleting course",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Course deleted",
+        description: `"${courseTitle}" has been removed`,
+      });
+      fetchCourses();
+      fetchStats();
+    }
   };
 
   if (loading) {
@@ -259,6 +282,33 @@ const Dashboard = () => {
                       >
                         Lessons
                       </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Course</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete "{course.title}"? This action cannot be undone and will permanently remove the course and all its lessons.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteCourse(course.id, course.title)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </CardContent>
                 </Card>
