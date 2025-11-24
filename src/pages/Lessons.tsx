@@ -464,9 +464,6 @@ const Lessons = () => {
                           <h3 className="font-semibold text-foreground">
                             {lesson.title}
                           </h3>
-                          <span className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">
-                            {lesson.lesson_type}
-                          </span>
                         </div>
                         {lesson.description && (
                           <p className="text-sm text-muted-foreground line-clamp-2">
