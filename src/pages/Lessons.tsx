@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Sparkles, Trash2, Save } from "lucide-react";
+import { ArrowLeft, Plus, Sparkles, Trash2, Save, Video, ClipboardList, FileText } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
 type Lesson = Database["public"]["Tables"]["lessons"]["Row"];
@@ -20,6 +20,7 @@ const Lessons = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [generatingContent, setGeneratingContent] = useState<{ type: string; lessonId: string } | null>(null);
   const [course, setCourse] = useState<any>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [editingLesson, setEditingLesson] = useState<Partial<Lesson> | null>(null);
@@ -154,6 +155,60 @@ const Lessons = () => {
     fetchCourseAndLessons();
   };
 
+  const handleGenerateContent = async (lesson: Lesson, contentType: 'video' | 'quiz' | 'assignment') => {
+    setGeneratingContent({ type: contentType, lessonId: lesson.id });
+    
+    const functionMap = {
+      video: 'generate-video-content',
+      quiz: 'generate-quiz',
+      assignment: 'generate-assignment'
+    };
+
+    const typeMap: Record<string, LessonType> = {
+      video: 'video' as LessonType,
+      quiz: 'quiz' as LessonType,
+      assignment: 'assignment' as LessonType
+    };
+
+    try {
+      const { data, error } = await supabase.functions.invoke(functionMap[contentType], {
+        body: {
+          lessonTitle: lesson.title,
+          lessonDescription: lesson.description,
+          courseContext: course?.title,
+        },
+      });
+
+      if (error) throw error;
+
+      // Update the lesson with the generated content and change its type
+      const { error: updateError } = await supabase
+        .from("lessons")
+        .update({
+          content: data.content,
+          lesson_type: typeMap[contentType],
+        })
+        .eq("id", lesson.id);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: `${contentType.charAt(0).toUpperCase() + contentType.slice(1)} content generated`,
+        description: `AI has generated ${contentType} content for "${lesson.title}"`,
+      });
+
+      fetchCourseAndLessons();
+    } catch (error: any) {
+      toast({
+        title: `Error generating ${contentType} content`,
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingContent(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -188,21 +243,26 @@ const Lessons = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-primary" />
-                Generate Lessons with AI
+                AI Content Generation
               </CardTitle>
               <CardDescription>
-                Let AI create a complete lesson structure for your course
+                Generate course lessons and content with AI
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button
-                onClick={handleGenerateLessons}
-                disabled={generating}
-                size="lg"
-              >
-                <Sparkles className="mr-2 h-5 w-5" />
-                {generating ? "Generating..." : "Generate Lessons with AI"}
-              </Button>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={handleGenerateLessons}
+                  disabled={generating}
+                  size="lg"
+                >
+                  <Sparkles className="mr-2 h-5 w-5" />
+                  {generating ? "Generating..." : "Generate Lessons with AI"}
+                </Button>
+                <div className="text-sm text-muted-foreground flex items-center">
+                  Use the buttons below on each lesson to generate videos, quizzes, or assignments
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -362,7 +422,40 @@ const Lessons = () => {
                           </p>
                         )}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleGenerateContent(lesson, 'video')}
+                          disabled={generatingContent?.lessonId === lesson.id}
+                        >
+                          <Video className="h-4 w-4 mr-1" />
+                          {generatingContent?.type === 'video' && generatingContent?.lessonId === lesson.id 
+                            ? "Generating..." 
+                            : "Video"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleGenerateContent(lesson, 'quiz')}
+                          disabled={generatingContent?.lessonId === lesson.id}
+                        >
+                          <ClipboardList className="h-4 w-4 mr-1" />
+                          {generatingContent?.type === 'quiz' && generatingContent?.lessonId === lesson.id 
+                            ? "Generating..." 
+                            : "Quiz"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleGenerateContent(lesson, 'assignment')}
+                          disabled={generatingContent?.lessonId === lesson.id}
+                        >
+                          <FileText className="h-4 w-4 mr-1" />
+                          {generatingContent?.type === 'assignment' && generatingContent?.lessonId === lesson.id 
+                            ? "Generating..." 
+                            : "Assignment"}
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"

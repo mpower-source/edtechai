@@ -9,6 +9,15 @@ verify_jwt = true
 [functions.lesson-summarizer]
 verify_jwt = true
 
+[functions.generate-video-content]
+verify_jwt = true
+
+[functions.generate-quiz]
+verify_jwt = true
+
+[functions.generate-assignment]
+verify_jwt = true
+
 [functions.pricing-suggestions]
 verify_jwt = true
 
