@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Sparkles, Trash2, Save, Video, ClipboardList, FileText } from "lucide-react";
+import { ArrowLeft, Plus, Sparkles, Trash2, Save, Video, ClipboardList, FileText, Pencil } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
 type Lesson = Database["public"]["Tables"]["lessons"]["Row"];
@@ -524,7 +524,7 @@ const Lessons = () => {
                           size="sm"
                           onClick={() => setEditingLesson(lesson)}
                         >
-                          Edit
+                          <Pencil className="h-4 w-4 text-blue-500" />
                         </Button>
                         <Button
                           variant="ghost"
