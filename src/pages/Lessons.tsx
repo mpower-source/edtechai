@@ -161,16 +161,18 @@ const Lessons = () => {
     fetchCourseAndLessons();
   };
 
-  const handleGenerateContent = async (lesson: Lesson, contentType: 'video' | 'quiz' | 'assignment') => {
+  const handleGenerateContent = async (lesson: Lesson, contentType: 'text' | 'video' | 'quiz' | 'assignment') => {
     setGeneratingContent({ type: contentType, lessonId: lesson.id });
     
     const functionMap = {
+      text: 'lesson-content-generator',
       video: 'generate-video-content',
       quiz: 'generate-quiz',
       assignment: 'generate-assignment'
     };
 
     const contentFieldMap: Record<string, string> = {
+      text: 'text_content',
       video: 'video_content',
       quiz: 'quiz_content',
       assignment: 'assignment_content'
@@ -178,11 +180,17 @@ const Lessons = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke(functionMap[contentType], {
-        body: {
-          lessonTitle: lesson.title,
-          lessonDescription: lesson.description,
-          courseContext: course?.title,
-        },
+        body: contentType === 'text' 
+          ? {
+              lessonTitle: lesson.title,
+              courseContext: course?.title,
+              lessonType: "text"
+            }
+          : {
+              lessonTitle: lesson.title,
+              lessonDescription: lesson.description,
+              courseContext: course?.title,
+            },
       });
 
       if (error) throw error;
@@ -467,6 +475,17 @@ const Lessons = () => {
                         )}
                       </div>
                       <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleGenerateContent(lesson, 'text')}
+                          disabled={generatingContent?.lessonId === lesson.id}
+                        >
+                          <FileText className="h-4 w-4 mr-1" />
+                          {generatingContent?.type === 'text' && generatingContent?.lessonId === lesson.id 
+                            ? "Generating..." 
+                            : "Text"}
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
