@@ -8,6 +8,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import CreateCourse from "./pages/CreateCourse";
 import EditCourse from "./pages/EditCourse";
+import Lessons from "./pages/Lessons";
 import Community from "./pages/Community";
 import Cohorts from "./pages/Cohorts";
 import Analytics from "./pages/Analytics";
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/create-course" element={<CreateCourse />} />
           <Route path="/course/:id" element={<EditCourse />} />
+          <Route path="/course/:id/lessons" element={<Lessons />} />
           <Route path="/community" element={<Community />} />
           <Route path="/cohorts" element={<Cohorts />} />
           <Route path="/analytics" element={<Analytics />} />

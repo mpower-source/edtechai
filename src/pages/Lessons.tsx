@@ -1,0 +1,393 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, Plus, Sparkles, Trash2, Save } from "lucide-react";
+import type { Database } from "@/integrations/supabase/types";
+
+type Lesson = Database["public"]["Tables"]["lessons"]["Row"];
+type LessonType = Database["public"]["Enums"]["lesson_type"];
+
+const Lessons = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [course, setCourse] = useState<any>(null);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [editingLesson, setEditingLesson] = useState<Partial<Lesson> | null>(null);
+
+  useEffect(() => {
+    fetchCourseAndLessons();
+  }, [id]);
+
+  const fetchCourseAndLessons = async () => {
+    if (!id) return;
+
+    const { data: courseData } = await supabase
+      .from("courses")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    setCourse(courseData);
+
+    const { data: lessonsData } = await supabase
+      .from("lessons")
+      .select("*")
+      .eq("course_id", id)
+      .order("order_index", { ascending: true });
+
+    setLessons(lessonsData || []);
+    setLoading(false);
+  };
+
+  const handleGenerateLessons = async () => {
+    if (!course) return;
+
+    setGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-lessons", {
+        body: {
+          courseTitle: course.title,
+          courseDescription: course.description,
+          courseId: id,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Lessons generated",
+        description: "AI has generated lessons for your course",
+      });
+
+      fetchCourseAndLessons();
+    } catch (error: any) {
+      toast({
+        title: "Error generating lessons",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleSaveLesson = async () => {
+    if (!editingLesson || !id || !editingLesson.title) return;
+
+    if (editingLesson.id) {
+      const { error } = await supabase
+        .from("lessons")
+        .update({
+          title: editingLesson.title,
+          description: editingLesson.description,
+          content: editingLesson.content,
+          lesson_type: editingLesson.lesson_type,
+          duration_minutes: editingLesson.duration_minutes,
+        })
+        .eq("id", editingLesson.id);
+
+      if (error) {
+        toast({
+          title: "Error updating lesson",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      const { error } = await supabase.from("lessons").insert({
+        course_id: id,
+        title: editingLesson.title,
+        description: editingLesson.description,
+        content: editingLesson.content,
+        lesson_type: editingLesson.lesson_type || "text",
+        duration_minutes: editingLesson.duration_minutes || 30,
+        order_index: editingLesson.order_index ?? lessons.length,
+      });
+
+      if (error) {
+        toast({
+          title: "Error creating lesson",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    toast({
+      title: "Lesson saved",
+      description: "Your lesson has been saved successfully",
+    });
+
+    setEditingLesson(null);
+    fetchCourseAndLessons();
+  };
+
+  const handleDeleteLesson = async (lessonId: string) => {
+    const { error } = await supabase.from("lessons").delete().eq("id", lessonId);
+
+    if (error) {
+      toast({
+        title: "Error deleting lesson",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Lesson deleted",
+      description: "The lesson has been removed",
+    });
+
+    fetchCourseAndLessons();
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-8">
+        <Button
+          variant="ghost"
+          onClick={() => navigate("/dashboard")}
+          className="mb-6"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Dashboard
+        </Button>
+
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            Manage Lessons: {course?.title}
+          </h1>
+          <p className="text-muted-foreground">
+            Create and organize lessons for your course
+          </p>
+        </div>
+
+        <div className="grid gap-6 mb-8">
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Generate Lessons with AI
+              </CardTitle>
+              <CardDescription>
+                Let AI create a complete lesson structure for your course
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={handleGenerateLessons}
+                disabled={generating}
+                size="lg"
+              >
+                <Sparkles className="mr-2 h-5 w-5" />
+                {generating ? "Generating..." : "Generate Lessons with AI"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {editingLesson && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {editingLesson.id ? "Edit Lesson" : "Create New Lesson"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    value={editingLesson.title || ""}
+                    onChange={(e) =>
+                      setEditingLesson({ ...editingLesson, title: e.target.value })
+                    }
+                    placeholder="Lesson title"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    value={editingLesson.description || ""}
+                    onChange={(e) =>
+                      setEditingLesson({
+                        ...editingLesson,
+                        description: e.target.value,
+                      })
+                    }
+                    placeholder="Lesson description"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="content">Content</Label>
+                  <Textarea
+                    id="content"
+                    value={editingLesson.content || ""}
+                    onChange={(e) =>
+                      setEditingLesson({ ...editingLesson, content: e.target.value })
+                    }
+                    placeholder="Lesson content"
+                    rows={10}
+                  />
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Type</Label>
+                    <Select
+                      value={editingLesson.lesson_type || "text"}
+                      onValueChange={(value) =>
+                        setEditingLesson({
+                          ...editingLesson,
+                          lesson_type: value as LessonType,
+                        })
+                      }
+                    >
+                      <SelectTrigger id="type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="text">Text</SelectItem>
+                        <SelectItem value="video">Video</SelectItem>
+                        <SelectItem value="quiz">Quiz</SelectItem>
+                        <SelectItem value="assignment">Assignment</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="duration">Duration (minutes)</Label>
+                    <Input
+                      id="duration"
+                      type="number"
+                      value={editingLesson.duration_minutes || ""}
+                      onChange={(e) =>
+                        setEditingLesson({
+                          ...editingLesson,
+                          duration_minutes: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      placeholder="30"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button onClick={handleSaveLesson}>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Lesson
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditingLesson(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Course Lessons ({lessons.length})</CardTitle>
+                <Button
+                  onClick={() =>
+                    setEditingLesson({
+                      title: "",
+                      description: "",
+                      content: "",
+                      lesson_type: "text",
+                      duration_minutes: 30,
+                      order_index: lessons.length,
+                    })
+                  }
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Lesson
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {lessons.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No lessons yet. Generate lessons with AI or create one manually.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {lessons.map((lesson, index) => (
+                    <div
+                      key={lesson.id}
+                      className="flex items-start justify-between p-4 border border-border rounded-lg hover:bg-accent/50 transition-colors"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-semibold text-muted-foreground">
+                            {index + 1}.
+                          </span>
+                          <h3 className="font-semibold text-foreground">
+                            {lesson.title}
+                          </h3>
+                          <span className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                            {lesson.lesson_type}
+                          </span>
+                        </div>
+                        {lesson.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {lesson.description}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingLesson(lesson)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteLesson(lesson.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Lessons;
