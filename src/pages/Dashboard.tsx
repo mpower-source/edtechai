@@ -4,12 +4,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, BookOpen, Plus, LogOut, User, MessageSquare, Calendar, BarChart3, Target, TrendingUp, Users, Trash2 } from "lucide-react";
+import { Sparkles, BookOpen, Plus, LogOut, User, MessageSquare, Calendar, BarChart3, Target, TrendingUp, Users, Trash2, MessagesSquare } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 import { StudentChatbot } from "@/components/StudentChatbot";
 
 type Course = Database["public"]["Tables"]["courses"]["Row"];
+
+interface CommunitySpace {
+  id: string;
+  course_id: string;
+  title: string;
+  description: string | null;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -18,6 +29,11 @@ const Dashboard = () => {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [courseSpaces, setCourseSpaces] = useState<{ [courseId: string]: CommunitySpace | null }>({});
+  const [spaceDialogOpen, setSpaceDialogOpen] = useState<string | null>(null);
+  const [newSpaceTitle, setNewSpaceTitle] = useState("");
+  const [newSpaceDescription, setNewSpaceDescription] = useState("");
+  const [creatingSpace, setCreatingSpace] = useState(false);
   const [stats, setStats] = useState({
     totalCourses: 0,
     totalStudents: 0,
@@ -29,6 +45,12 @@ const Dashboard = () => {
     fetchCourses();
     fetchStats();
   }, []);
+
+  useEffect(() => {
+    if (courses.length > 0) {
+      fetchCourseSpaces();
+    }
+  }, [courses]);
 
   const checkUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -70,6 +92,48 @@ const Dashboard = () => {
     } else {
       setCourses(data || []);
     }
+  };
+
+  const fetchCourseSpaces = async () => {
+    const courseIds = courses.map((c) => c.id);
+    const { data, error } = await supabase
+      .from("community_spaces")
+      .select("*")
+      .in("course_id", courseIds);
+
+    if (!error && data) {
+      const spacesMap: { [courseId: string]: CommunitySpace | null } = {};
+      courses.forEach((course) => {
+        spacesMap[course.id] = data.find((s) => s.course_id === course.id) || null;
+      });
+      setCourseSpaces(spacesMap);
+    }
+  };
+
+  const handleCreateSpace = async (courseId: string) => {
+    if (!newSpaceTitle.trim()) return;
+    setCreatingSpace(true);
+
+    const { error } = await supabase.from("community_spaces").insert({
+      course_id: courseId,
+      title: newSpaceTitle,
+      description: newSpaceDescription || null,
+    });
+
+    if (error) {
+      toast({
+        title: "Error creating space",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({ title: "Community space created!" });
+      setNewSpaceTitle("");
+      setNewSpaceDescription("");
+      setSpaceDialogOpen(null);
+      fetchCourseSpaces();
+    }
+    setCreatingSpace(false);
   };
 
   const fetchStats = async () => {
@@ -268,7 +332,7 @@ const Dashboard = () => {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button 
                         variant="outline" 
                         size="sm" 
@@ -283,6 +347,65 @@ const Dashboard = () => {
                       >
                         Lessons
                       </Button>
+                      
+                      {/* Community Space Button */}
+                      {courseSpaces[course.id] ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate("/community")}
+                        >
+                          <MessagesSquare className="h-4 w-4 mr-1" />
+                          Community
+                        </Button>
+                      ) : (
+                        <Dialog open={spaceDialogOpen === course.id} onOpenChange={(open) => setSpaceDialogOpen(open ? course.id : null)}>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MessagesSquare className="h-4 w-4 mr-1" />
+                              Create Space
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Create Community Space</DialogTitle>
+                              <DialogDescription>
+                                Create a discussion space for "{course.title}" where students can connect and discuss.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="space-title">Space Title</Label>
+                                <Input
+                                  id="space-title"
+                                  placeholder="e.g., Course Discussions"
+                                  value={newSpaceTitle}
+                                  onChange={(e) => setNewSpaceTitle(e.target.value)}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="space-description">Description (optional)</Label>
+                                <Textarea
+                                  id="space-description"
+                                  placeholder="What is this space for?"
+                                  value={newSpaceDescription}
+                                  onChange={(e) => setNewSpaceDescription(e.target.value)}
+                                  rows={3}
+                                />
+                              </div>
+                            </div>
+                            <DialogFooter>
+                              <Button
+                                onClick={() => handleCreateSpace(course.id)}
+                                disabled={creatingSpace || !newSpaceTitle.trim()}
+                              >
+                                {creatingSpace ? "Creating..." : "Create Space"}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      )}
+
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button 
