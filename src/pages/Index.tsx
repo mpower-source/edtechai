@@ -28,7 +28,7 @@ const Index = () => {
       </nav>
 
       {/* Hero Section */}
-      <section className="container mx-auto px-4 py-20 text-center">
+      <section className="container mx-auto px-4 pt-20 pb-12 text-center">
         <div className="max-w-3xl mx-auto space-y-6">
           <h1 className="text-5xl font-bold text-foreground leading-tight">
             Create & Sell Online Courses with{" "}
@@ -50,7 +50,7 @@ const Index = () => {
       </section>
 
       {/* Features Section */}
-      <section className="container mx-auto px-4 py-20">
+      <section className="container mx-auto px-4 pt-10 pb-20">
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold text-foreground mb-4">
             Everything You Need to Succeed
