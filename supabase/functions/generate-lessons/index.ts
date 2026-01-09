@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,23 +8,31 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// Input validation schema
+const generateLessonsSchema = z.object({
+  courseTitle: z.string().min(1, "Course title is required").max(200, "Course title too long"),
+  courseDescription: z.string().max(2000, "Course description too long").optional(),
+  courseId: z.string().uuid("Invalid course ID format")
+});
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { courseTitle, courseDescription, courseId } = await req.json();
-
-    if (!courseTitle || !courseId) {
+    // Parse and validate input
+    const rawBody = await req.json();
+    const validationResult = generateLessonsSchema.safeParse(rawBody);
+    
+    if (!validationResult.success) {
       return new Response(
-        JSON.stringify({ error: "Course title and ID are required" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ error: "Invalid input", details: validationResult.error.errors }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    const { courseTitle, courseDescription, courseId } = validationResult.data;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -147,11 +156,13 @@ Generate a complete lesson plan with detailed content for each lesson.`;
 
     const lessonsToInsert = lessonsData.map((lesson: any, index: number) => ({
       course_id: courseId,
-      title: lesson.title,
-      description: lesson.description,
-      content: lesson.content,
-      lesson_type: lesson.lesson_type || "text",
-      duration_minutes: lesson.duration_minutes || 30,
+      title: String(lesson.title || '').substring(0, 500),
+      description: String(lesson.description || '').substring(0, 2000),
+      content: String(lesson.content || '').substring(0, 50000),
+      lesson_type: ["text", "video", "quiz", "assignment"].includes(lesson.lesson_type) 
+        ? lesson.lesson_type 
+        : "text",
+      duration_minutes: Math.min(Math.max(Number(lesson.duration_minutes) || 30, 1), 600),
       order_index: index,
       is_free: index === 0,
     }));
@@ -185,9 +196,7 @@ Generate a complete lesson plan with detailed content for each lesson.`;
   } catch (error) {
     console.error("Error in generate-lessons function:", error);
     return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
-      }),
+      JSON.stringify({ error: "An error occurred generating lessons" }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

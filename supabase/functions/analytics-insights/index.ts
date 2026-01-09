@@ -1,9 +1,32 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Input validation schema - limit size of analytics data
+const analyticsSchema = z.object({
+  analyticsData: z.object({
+    totalEnrollments: z.number().optional(),
+    completionRate: z.number().optional(),
+    averageProgress: z.number().optional(),
+    activeStudents: z.number().optional(),
+    revenue: z.number().optional(),
+    courses: z.array(z.object({
+      title: z.string().max(200),
+      enrollments: z.number(),
+      completionRate: z.number().optional(),
+      revenue: z.number().optional()
+    })).max(100).optional(),
+    timeline: z.array(z.object({
+      date: z.string(),
+      enrollments: z.number(),
+      completions: z.number().optional()
+    })).max(365).optional()
+  }).passthrough()
+});
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -11,7 +34,18 @@ serve(async (req) => {
   }
 
   try {
-    const { analyticsData } = await req.json();
+    // Parse and validate input
+    const rawBody = await req.json();
+    const validationResult = analyticsSchema.safeParse(rawBody);
+    
+    if (!validationResult.success) {
+      return new Response(
+        JSON.stringify({ error: "Invalid input", details: validationResult.error.errors }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    const { analyticsData } = validationResult.data;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!LOVABLE_API_KEY) {
@@ -19,6 +53,9 @@ serve(async (req) => {
     }
 
     console.log("Generating analytics insights");
+
+    // Limit the size of the stringified data sent to AI
+    const safeAnalyticsString = JSON.stringify(analyticsData, null, 2).substring(0, 10000);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -37,7 +74,7 @@ serve(async (req) => {
             role: "user",
             content: `Analyze this course performance data and provide actionable insights:
 
-${JSON.stringify(analyticsData, null, 2)}
+${safeAnalyticsString}
 
 Provide:
 1. Key performance indicators summary
@@ -69,7 +106,7 @@ Provide:
   } catch (error: any) {
     console.error("Error in analytics-insights:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: "An error occurred generating insights" }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
