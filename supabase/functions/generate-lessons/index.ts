@@ -21,6 +21,34 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    // Create client with user's JWT to verify identity and ownership
+    const userSupabase = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    // Verify the user is authenticated
+    const { data: { user }, error: userError } = await userSupabase.auth.getUser();
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const userId = user.id;
+
     // Parse and validate input
     const rawBody = await req.json();
     const validationResult = generateLessonsSchema.safeParse(rawBody);
@@ -33,6 +61,27 @@ serve(async (req) => {
     }
     
     const { courseTitle, courseDescription, courseId } = validationResult.data;
+
+    // Verify course ownership before proceeding
+    const { data: course, error: courseError } = await userSupabase
+      .from('courses')
+      .select('creator_id')
+      .eq('id', courseId)
+      .single();
+
+    if (courseError || !course) {
+      return new Response(
+        JSON.stringify({ error: 'Course not found' }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (course.creator_id !== userId) {
+      return new Response(
+        JSON.stringify({ error: 'Not authorized to modify this course' }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -150,9 +199,9 @@ Generate a complete lesson plan with detailed content for each lesson.`;
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Use service role key for the insert (after ownership is verified)
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, serviceKey);
 
     const lessonsToInsert = lessonsData.map((lesson: any, index: number) => ({
       course_id: courseId,
