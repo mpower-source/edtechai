@@ -1,9 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Input validation schema
+const courseOutlineSchema = z.object({
+  courseTitle: z.string().min(1, "Course title is required").max(200, "Course title too long")
+});
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -11,14 +17,18 @@ serve(async (req) => {
   }
 
   try {
-    const { courseTitle } = await req.json();
+    // Parse and validate input
+    const rawBody = await req.json();
+    const validationResult = courseOutlineSchema.safeParse(rawBody);
     
-    if (!courseTitle) {
+    if (!validationResult.success) {
       return new Response(
-        JSON.stringify({ error: 'Course title is required' }),
+        JSON.stringify({ error: "Invalid input", details: validationResult.error.errors }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    
+    const { courseTitle } = validationResult.data;
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -89,9 +99,8 @@ Keep it concise (3-4 paragraphs) and engaging.`
 
   } catch (error) {
     console.error('Error in generate-course-outline:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to generate course outline';
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: 'Failed to generate course outline' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
