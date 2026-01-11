@@ -1,9 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Input validation schema
+const summarizeSchema = z.object({
+  lessonContent: z.string().min(1, "Content required").max(50000, "Content too long")
+});
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -11,14 +18,49 @@ serve(async (req) => {
   }
 
   try {
-    const { lessonContent } = await req.json();
+    // Verify JWT authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Parse and validate input
+    const rawBody = await req.json();
+    const validationResult = summarizeSchema.safeParse(rawBody);
+    
+    if (!validationResult.success) {
+      return new Response(
+        JSON.stringify({ error: "Invalid input", details: validationResult.error.errors }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { lessonContent } = validationResult.data;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    console.log("Generating lesson summary");
+    console.log("Generating lesson summary for user:", user.id);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -49,9 +91,6 @@ Provide:
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error("AI gateway error:", response.status, error);
-      
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
           status: 429,
@@ -71,7 +110,7 @@ Provide:
   } catch (error: any) {
     console.error("Error in lesson-summarizer:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: "An error occurred generating summary" }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
