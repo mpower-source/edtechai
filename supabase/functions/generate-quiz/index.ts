@@ -1,9 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Input validation schema
+const quizSchema = z.object({
+  lessonTitle: z.string().min(1, "Lesson title required").max(200, "Title too long"),
+  lessonDescription: z.string().max(2000).optional(),
+  courseContext: z.string().max(1000).optional()
+});
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -11,14 +20,49 @@ serve(async (req) => {
   }
 
   try {
-    const { lessonTitle, lessonDescription, courseContext } = await req.json();
+    // Verify JWT authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Parse and validate input
+    const rawBody = await req.json();
+    const validationResult = quizSchema.safeParse(rawBody);
+    
+    if (!validationResult.success) {
+      return new Response(
+        JSON.stringify({ error: "Invalid input", details: validationResult.error.errors }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { lessonTitle, lessonDescription, courseContext } = validationResult.data;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    console.log("Generating quiz for:", lessonTitle);
+    console.log("Generating quiz for user:", user.id, "lesson:", lessonTitle);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -58,9 +102,6 @@ Format each question clearly with the correct answer and explanation. Mix diffic
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error("AI gateway error:", response.status, error);
-      
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
           status: 429,
@@ -69,7 +110,7 @@ Format each question clearly with the correct answer and explanation. Mix diffic
       }
       
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required. Please add credits to your workspace." }), {
+        return new Response(JSON.stringify({ error: "Service unavailable." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -93,7 +134,7 @@ Format each question clearly with the correct answer and explanation. Mix diffic
   } catch (error: any) {
     console.error("Error in generate-quiz:", error);
     return new Response(
-      JSON.stringify({ error: error.message || "Failed to generate quiz" }),
+      JSON.stringify({ error: "Failed to generate quiz" }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
