@@ -53,8 +53,9 @@ export const VideoRecorder = ({
   // Audio analyzer refs
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioGainRef = useRef<GainNode | null>(null);
   const audioAnimationRef = useRef<number | null>(null);
-  
+
   const [isRecording, setIsRecording] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
@@ -112,46 +113,73 @@ export const VideoRecorder = ({
   };
   const startAudioAnalyzer = useCallback((mediaStream: MediaStream) => {
     try {
-      const audioContext = new AudioContext();
+      // If there's no audio track, don't bother (meter would stay at 0)
+      if (mediaStream.getAudioTracks().length === 0) {
+        setAudioLevel(0);
+        setPeakLevel(0);
+        return;
+      }
+
+      const AudioContextClass = window.AudioContext ?? (window as any).webkitAudioContext;
+      const audioContext: AudioContext = new AudioContextClass();
+
+      // Some browsers start in "suspended" state until resumed from a user gesture.
+      // We're already inside a click handler (Start Camera), but resume defensively.
+      audioContext.resume?.().catch(() => {});
+
       const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.5;
-      
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.8;
+
       const source = audioContext.createMediaStreamSource(mediaStream);
+      const gain = audioContext.createGain();
+      gain.gain.value = 0; // keep analysis running without audible feedback
+
+      // Build graph: source -> analyser -> (silent) gain -> destination
       source.connect(analyser);
-      
+      analyser.connect(gain);
+      gain.connect(audioContext.destination);
+
       audioContextRef.current = audioContext;
       analyserRef.current = analyser;
-      
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      audioGainRef.current = gain;
+
+      const dataArray = new Uint8Array(analyser.fftSize);
       let peak = 0;
-      
+
       const updateLevel = () => {
-        if (!analyserRef.current) return;
-        
-        analyserRef.current.getByteFrequencyData(dataArray);
-        
-        // Calculate average level
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
+        const a = analyserRef.current;
+        const ctx = audioContextRef.current;
+        if (!a || !ctx) return;
+
+        if (ctx.state === "suspended") {
+          ctx.resume().catch(() => {});
         }
-        const average = sum / dataArray.length;
-        const normalizedLevel = Math.min(100, (average / 128) * 100);
-        
+
+        // Time-domain RMS gives a much more intuitive "mic level" than averaging FFT bins.
+        a.getByteTimeDomainData(dataArray);
+
+        let sumSquares = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = (dataArray[i] - 128) / 128; // -1..1
+          sumSquares += v * v;
+        }
+        const rms = Math.sqrt(sumSquares / dataArray.length); // 0..~1
+        const normalizedLevel = Math.min(100, rms * 400);
+
         // Track peak with decay
         if (normalizedLevel > peak) {
           peak = normalizedLevel;
         } else {
-          peak = Math.max(0, peak - 0.5);
+          peak = Math.max(0, peak - 1.5);
         }
-        
+
         setAudioLevel(normalizedLevel);
         setPeakLevel(peak);
-        
+
         audioAnimationRef.current = requestAnimationFrame(updateLevel);
       };
-      
+
       updateLevel();
     } catch (error) {
       console.error("Audio analyzer error:", error);
@@ -193,6 +221,7 @@ export const VideoRecorder = ({
       audioContextRef.current = null;
     }
     analyserRef.current = null;
+    audioGainRef.current = null;
     setAudioLevel(0);
     setPeakLevel(0);
   }, []);
