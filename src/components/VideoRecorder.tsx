@@ -110,26 +110,6 @@ export const VideoRecorder = ({
 
     return "";
   };
-  const startCamera = useCallback(async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: cameraEnabled,
-        audio: micEnabled,
-      });
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-      setIsPreviewing(true);
-    } catch (error) {
-      toast({
-        title: "Camera access denied",
-        description: "Please allow camera and microphone access to record video.",
-        variant: "destructive",
-      });
-    }
-  }, [cameraEnabled, micEnabled, toast]);
-
   const stopAudioAnalyzer = useCallback(() => {
     if (audioAnimationRef.current) {
       cancelAnimationFrame(audioAnimationRef.current);
@@ -192,6 +172,31 @@ export const VideoRecorder = ({
     }
   }, []);
 
+  const startCamera = useCallback(async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: cameraEnabled,
+        audio: micEnabled,
+      });
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+      setIsPreviewing(true);
+      
+      // Start audio analyzer immediately when camera starts
+      if (micEnabled) {
+        startAudioAnalyzer(mediaStream);
+      }
+    } catch (error) {
+      toast({
+        title: "Camera access denied",
+        description: "Please allow camera and microphone access to record video.",
+        variant: "destructive",
+      });
+    }
+  }, [cameraEnabled, micEnabled, toast, startAudioAnalyzer]);
+
   const stopCamera = useCallback(() => {
     stopAudioAnalyzer();
     if (stream) {
@@ -248,10 +253,7 @@ export const VideoRecorder = ({
       setIsRecording(true);
       setRecordingTime(0);
 
-      // Start audio analyzer for level meter
-      if (micEnabled) {
-        startAudioAnalyzer(stream);
-      }
+      // Audio analyzer already started in startCamera
 
       timerRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
@@ -940,10 +942,39 @@ export const VideoRecorder = ({
           
           {/* Recording Controls */}
           <div className="flex items-center gap-3 justify-center">
-            {/* Vertical Audio Level Meter - shown during recording */}
-            {isRecording && micEnabled && (
+            <div className="flex flex-wrap gap-2 justify-center">
+              {!isPreviewing && !recordedUrl && (
+                <Button onClick={startCamera}>
+                  <Camera className="h-4 w-4 mr-2" />
+                  Start Camera
+                </Button>
+              )}
+              
+              {isPreviewing && !isRecording && (
+                <>
+                  <Button onClick={startRecording} variant="destructive">
+                    <Circle className="h-4 w-4 mr-2 fill-current" />
+                    Start Recording
+                  </Button>
+                  <Button onClick={stopCamera} variant="outline">
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                </>
+              )}
+              
+              {isRecording && (
+                <Button onClick={stopRecording} variant="destructive">
+                  <Square className="h-4 w-4 mr-2 fill-current" />
+                  Stop Recording
+                </Button>
+              )}
+            </div>
+            
+            {/* Vertical Audio Level Meter - shown when previewing or recording */}
+            {isPreviewing && micEnabled && (
               <div className="flex flex-col items-center gap-1">
-                <div className="relative w-3 h-24 bg-muted rounded-full overflow-hidden rotate-180">
+                <div className="relative w-3 h-20 bg-muted rounded-full overflow-hidden rotate-180">
                   {/* Level bar */}
                   <div 
                     className="absolute bottom-0 left-0 right-0 transition-all duration-75 rounded-full"
@@ -979,81 +1010,52 @@ export const VideoRecorder = ({
                 )}
               </div>
             )}
-            
-            <div className="flex flex-wrap gap-2 justify-center">
-              {!isPreviewing && !recordedUrl && (
-                <Button onClick={startCamera}>
-                  <Camera className="h-4 w-4 mr-2" />
-                  Start Camera
-                </Button>
-              )}
-              
-              {isPreviewing && !isRecording && (
-                <>
-                  <Button onClick={startRecording} variant="destructive">
-                    <Circle className="h-4 w-4 mr-2 fill-current" />
-                    Start Recording
-                  </Button>
-                  <Button onClick={stopCamera} variant="outline">
-                    <X className="h-4 w-4 mr-2" />
-                    Cancel
-                  </Button>
-                </>
-              )}
-              
-              {isRecording && (
-                <Button onClick={stopRecording} variant="destructive">
-                  <Square className="h-4 w-4 mr-2 fill-current" />
-                  Stop Recording
-                </Button>
-              )}
-            </div>
-            
-            {recordedUrl && (
-              <div className="flex flex-wrap gap-2 justify-center">
-                {playbackError && (
-                  <Button 
-                    onClick={fixPlayback} 
-                    variant="default"
-                    disabled={isFixingPlayback}
-                  >
-                    {isFixingPlayback ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Fixing...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Fix Playback
-                      </>
-                    )}
-                  </Button>
-                )}
-                <Button 
-                  onClick={() => setIsTrimMode(!isTrimMode)} 
-                  variant={isTrimMode ? "default" : "outline"}
-                  disabled={isTrimming || !!playbackError}
-                >
-                  <Scissors className="h-4 w-4 mr-2" />
-                  {isTrimMode ? "Done Trimming" : "Trim"}
-                </Button>
-                <Button onClick={handleDownload} variant="outline" disabled={isTrimming || uploading}>
-                  <Download className="h-4 w-4 mr-2" />
-                  {isTrimming ? "Processing..." : "Download"}
-                </Button>
-                {lessonId && (
-                  <Button onClick={handleUpload} disabled={uploading || isTrimming || !!playbackError}>
-                    <Upload className="h-4 w-4 mr-2" />
-                    {uploading ? "Uploading..." : isTrimming ? "Processing..." : "Upload to Lesson"}
-                  </Button>
-                )}
-                <Button onClick={resetRecording} variant="ghost" disabled={isTrimming || uploading || isFixingPlayback}>
-                  Re-record
-                </Button>
-              </div>
-            )}
           </div>
+          
+          {recordedUrl && (
+            <div className="flex flex-wrap gap-2 justify-center">
+              {playbackError && (
+                <Button 
+                  onClick={fixPlayback} 
+                  variant="default"
+                  disabled={isFixingPlayback}
+                >
+                  {isFixingPlayback ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Fixing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Fix Playback
+                    </>
+                  )}
+                </Button>
+              )}
+              <Button 
+                onClick={() => setIsTrimMode(!isTrimMode)} 
+                variant={isTrimMode ? "default" : "outline"}
+                disabled={isTrimming || !!playbackError}
+              >
+                <Scissors className="h-4 w-4 mr-2" />
+                {isTrimMode ? "Done Trimming" : "Trim"}
+              </Button>
+              <Button onClick={handleDownload} variant="outline" disabled={isTrimming || uploading}>
+                <Download className="h-4 w-4 mr-2" />
+                {isTrimming ? "Processing..." : "Download"}
+              </Button>
+              {lessonId && (
+                <Button onClick={handleUpload} disabled={uploading || isTrimming || !!playbackError}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  {uploading ? "Uploading..." : isTrimming ? "Processing..." : "Upload to Lesson"}
+                </Button>
+              )}
+              <Button onClick={resetRecording} variant="ghost" disabled={isTrimming || uploading || isFixingPlayback}>
+                Re-record
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
       
