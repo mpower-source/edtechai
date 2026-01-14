@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
-import { Sparkles, BookOpen, Users, TrendingUp } from "lucide-react";
+import { Sparkles, BookOpen, Users, TrendingUp, CreditCard, Rocket } from "lucide-react";
 import { StudentChatbot } from "@/components/StudentChatbot";
 
 const Index = () => {
@@ -107,9 +107,8 @@ const Index = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                💳 Payment Integration
-              </CardTitle>
+              <CreditCard className="h-12 w-12 text-primary mb-4" />
+              <CardTitle>Payment Integration</CardTitle>
               <CardDescription>
                 Accept payments in Thai Baht with Stripe, Omise, or 2C2P. 
                 Automatic invoicing and payout management.
@@ -119,9 +118,8 @@ const Index = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                🚀 Scale Your Business
-              </CardTitle>
+              <Rocket className="h-12 w-12 text-secondary mb-4" />
+              <CardTitle>Scale Your Business</CardTitle>
               <CardDescription>
                 Host unlimited students, courses, and content. 
                 Grow from your first student to thousands.
