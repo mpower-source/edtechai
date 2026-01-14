@@ -41,11 +41,14 @@ export const VideoRecorder = ({
   const playbackVideoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const recordingMimeTypeRef = useRef<string | null>(null);
   
   const [isRecording, setIsRecording] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  const [recordedMimeType, setRecordedMimeType] = useState<string>("video/webm");
+  const [recordedFileExt, setRecordedFileExt] = useState<"webm" | "mp4">("webm");
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [uploading, setUploading] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(true);
@@ -60,6 +63,26 @@ export const VideoRecorder = ({
   const [trimEnd, setTrimEnd] = useState(0);
   const [isTrimming, setIsTrimming] = useState(false);
 
+  const getExtForMimeType = (mimeType: string): "webm" | "mp4" =>
+    mimeType.includes("mp4") ? "mp4" : "webm";
+
+  const pickRecordingMimeType = () => {
+    const candidates = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+      "video/mp4",
+    ];
+
+    for (const type of candidates) {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+
+    return "";
+  };
   const startCamera = useCallback(async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -90,44 +113,84 @@ export const VideoRecorder = ({
 
   const startRecording = useCallback(() => {
     if (!stream) return;
-    
-    chunksRef.current = [];
-    const mediaRecorder = new MediaRecorder(stream, {
-      mimeType: 'video/webm;codecs=vp9',
-    });
-    
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunksRef.current.push(event.data);
-      }
-    };
-    
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-      setRecordedBlob(blob);
-      setRecordedUrl(URL.createObjectURL(blob));
-    };
-    
-    mediaRecorderRef.current = mediaRecorder;
-    mediaRecorder.start();
-    setIsRecording(true);
-    setRecordingTime(0);
-    
-    timerRef.current = setInterval(() => {
-      setRecordingTime(prev => prev + 1);
-    }, 1000);
-  }, [stream]);
+
+    try {
+      chunksRef.current = [];
+
+      const mimeType = pickRecordingMimeType();
+      recordingMimeTypeRef.current = mimeType || null;
+
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const finalMimeType =
+          recordingMimeTypeRef.current || mediaRecorder.mimeType || "video/webm";
+
+        const blob = new Blob(chunksRef.current, { type: finalMimeType });
+
+        if (!blob.size) {
+          toast({
+            title: "Recording failed",
+            description:
+              "No video data was captured. Please try again (and ensure camera/mic permissions are granted).",
+            variant: "destructive",
+          });
+          // Important: stop tracks AFTER MediaRecorder has finalized data
+          stopCamera();
+          return;
+        }
+
+        setRecordedBlob(blob);
+        setRecordedMimeType(finalMimeType);
+        setRecordedFileExt(getExtForMimeType(finalMimeType));
+        setRecordedUrl(URL.createObjectURL(blob));
+
+        // Important: stop tracks AFTER MediaRecorder has finalized data
+        stopCamera();
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      // timeslice improves reliability of dataavailable in some browsers
+      mediaRecorder.start(250);
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    } catch (error: any) {
+      toast({
+        title: "Recording not supported",
+        description:
+          error?.message ||
+          "Your browser doesn't support recording with the current settings.",
+        variant: "destructive",
+      });
+    }
+  }, [stream, stopCamera, toast]);
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
+    const mr = mediaRecorderRef.current;
+    if (mr && isRecording) {
+      try {
+        // Flush buffered chunks before stopping (fixes empty/unplayable blobs in some browsers)
+        mr.requestData?.();
+      } catch {
+        // ignore
+      }
+      mr.stop();
       setIsRecording(false);
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
-      stopCamera();
     }
-  }, [isRecording, stopCamera]);
+  }, [isRecording]);
 
   const resetRecording = useCallback(() => {
     if (recordedUrl) {
@@ -156,15 +219,24 @@ export const VideoRecorder = ({
   };
 
   const handleVideoLoaded = useCallback(() => {
-    if (playbackVideoRef.current) {
-      const duration = playbackVideoRef.current.duration;
-      if (isFinite(duration) && duration > 0) {
-        setVideoDuration(duration);
-        setTrimEnd(duration);
-      }
-      playbackVideoRef.current.currentTime = 0;
+    const v = playbackVideoRef.current;
+    if (!v) return;
+
+    const duration = v.duration;
+    if (isFinite(duration) && duration > 0) {
+      setVideoDuration(duration);
+      setTrimEnd((prev) => (prev > 0 ? prev : duration));
     }
+
+    v.currentTime = 0;
   }, []);
+
+  useEffect(() => {
+    const v = playbackVideoRef.current;
+    if (recordedUrl && v) {
+      v.load();
+    }
+  }, [recordedUrl]);
 
   const previewTrimmedSection = useCallback(() => {
     if (playbackVideoRef.current) {
@@ -185,34 +257,48 @@ export const VideoRecorder = ({
 
   const createTrimmedVideo = useCallback(async (): Promise<Blob | null> => {
     if (!recordedUrl || !recordedBlob) return null;
-    
+
+    // Trimming MP4 reliably in-browser is not supported in this simple client-side encoder.
+    // Keep playback working by falling back to the original.
+    if (recordedFileExt === "mp4") {
+      toast({
+        title: "Trimming not available",
+        description: "Trimming isn't supported for MP4 recordings yet. Using the original video.",
+      });
+      return recordedBlob;
+    }
+
     // If no trimming needed, return original
     if (trimStart === 0 && trimEnd === videoDuration) {
       return recordedBlob;
     }
 
     setIsTrimming(true);
-    
+
     try {
       const video = document.createElement('video');
       video.src = recordedUrl;
       video.muted = true;
-      
+
       await new Promise<void>((resolve) => {
         video.onloadedmetadata = () => resolve();
       });
-      
+
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d')!;
-      
+
       const canvasStream = canvas.captureStream(30);
-      
-      const mediaRecorder = new MediaRecorder(canvasStream, {
-        mimeType: 'video/webm;codecs=vp9',
-      });
-      
+
+      const trimMimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+        ? "video/webm;codecs=vp9,opus"
+        : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+          ? "video/webm;codecs=vp8,opus"
+          : "video/webm";
+
+      const mediaRecorder = new MediaRecorder(canvasStream, trimMimeType ? { mimeType: trimMimeType } : undefined);
+
       const chunks: Blob[] = [];
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunks.push(e.data);
@@ -267,24 +353,26 @@ export const VideoRecorder = ({
 
   const handleDownload = useCallback(async () => {
     if (!recordedBlob) return;
-    
+
     const blobToDownload = isTrimMode ? await createTrimmedVideo() : recordedBlob;
     if (!blobToDownload) return;
-    
+
     const url = URL.createObjectURL(blobToDownload);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${lessonTitle || 'lesson'}-video.webm`;
+    a.download = `${lessonTitle || 'lesson'}-video.${recordedFileExt}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     toast({
       title: "Video downloaded",
-      description: isTrimMode ? "Trimmed video saved to your device." : "Your recording has been saved to your device.",
+      description: isTrimMode
+        ? "Trimmed video saved to your device."
+        : "Your recording has been saved to your device.",
     });
-  }, [recordedBlob, lessonTitle, toast, isTrimMode, createTrimmedVideo]);
+  }, [recordedBlob, lessonTitle, toast, isTrimMode, createTrimmedVideo, recordedFileExt]);
 
   const handleUpload = useCallback(async () => {
     if (!recordedBlob || !lessonId) {
@@ -305,12 +393,12 @@ export const VideoRecorder = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
       
-      const fileName = `${user.id}/${lessonId}/${Date.now()}.webm`;
-      
+      const fileName = `${user.id}/${lessonId}/${Date.now()}.${recordedFileExt}`;
+
       const { error: uploadError } = await supabase.storage
         .from('lesson-videos')
         .upload(fileName, blobToUpload, {
-          contentType: 'video/webm',
+          contentType: blobToUpload.type || recordedMimeType,
           upsert: true,
         });
       
@@ -342,7 +430,7 @@ export const VideoRecorder = ({
     } finally {
       setUploading(false);
     }
-  }, [recordedBlob, lessonId, toast, onVideoUploaded, isTrimMode, createTrimmedVideo]);
+  }, [recordedBlob, lessonId, toast, onVideoUploaded, isTrimMode, createTrimmedVideo, recordedFileExt, recordedMimeType]);
 
   useEffect(() => {
     return () => {
@@ -380,11 +468,23 @@ export const VideoRecorder = ({
               <video
                 ref={playbackVideoRef}
                 src={recordedUrl}
-                controls={!isTrimMode}
+                controls
                 autoPlay={false}
                 playsInline
+                preload="metadata"
                 className="w-full h-full object-cover"
-                onLoadedData={handleVideoLoaded}
+                onLoadedMetadata={handleVideoLoaded}
+                onError={(e) => {
+                  const code = e.currentTarget.error?.code;
+                  toast({
+                    title: "Playback failed",
+                    description:
+                      code === 4
+                        ? "This recording format isn't supported in your browser."
+                        : "Could not play this recording.",
+                    variant: "destructive",
+                  });
+                }}
               />
             ) : (
               <video
