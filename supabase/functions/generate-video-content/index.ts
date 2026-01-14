@@ -79,27 +79,25 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are an expert educational video script writer. Generate comprehensive video scripts with detailed narration, visual cues, and timing.`
+            content: `You are an expert educational video narrator. Write concise, engaging voiceover scripts that are easy to read aloud naturally. Keep scripts under 2 minutes when spoken (approximately 250-300 words).`
           },
           {
             role: "user",
-            content: `Create a detailed video script for the lesson: "${lessonTitle}"
+            content: `Write a brief voiceover narration script for this lesson: "${lessonTitle}"
             
 ${lessonDescription ? `Lesson Description: ${lessonDescription}` : ''}
-Course Context: ${courseContext || "General course"}
+${courseContext ? `Course Context: ${courseContext}` : ''}
 
-Please provide:
-1. Video Title and Hook (first 10 seconds)
-2. Introduction (30-60 seconds)
-3. Main Content Sections (with timestamps)
-   - Key points to cover
-   - Visual suggestions (graphics, animations, demonstrations)
-   - Narration script for each section
-4. Practical Examples/Demonstrations
-5. Summary and Key Takeaways (30 seconds)
-6. Call to Action/Next Steps
+Requirements:
+- Write ONLY the spoken narration text (no visual cues, timestamps, or stage directions)
+- Keep it under 300 words (about 2 minutes when spoken)
+- Start with a brief hook and introduction
+- Cover the key concepts as an overview
+- End with a simple takeaway or transition
+- Use conversational, easy-to-read-aloud language
+- Write in a friendly, engaging tone
 
-Format with clear timestamps and visual cues. Estimated total duration: 8-12 minutes.`
+Output only the narration script text, nothing else.`
           }
         ],
       }),
