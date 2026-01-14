@@ -296,7 +296,15 @@ export const VideoRecorder = ({
     setTrimEnd(0);
     setVideoDuration(0);
     setPlaybackError(null);
-    stopAutoScroll();
+    // Stop auto-scroll and reset teleprompter position
+    if (scrollAnimationRef.current) {
+      cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = null;
+    }
+    setIsAutoScrolling(false);
+    if (scriptContainerRef.current) {
+      scriptContainerRef.current.scrollTop = 0;
+    }
   }, [recordedUrl]);
 
   // Teleprompter auto-scroll functions
