@@ -18,9 +18,13 @@ import {
   MicOff,
   Scissors,
   Play,
+  Pause,
   RotateCcw,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUp
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -78,6 +82,13 @@ export const VideoRecorder = ({
   // Playback error state
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [isFixingPlayback, setIsFixingPlayback] = useState(false);
+  
+  // Teleprompter state
+  const [isAutoScrolling, setIsAutoScrolling] = useState(false);
+  const [scrollSpeed, setScrollSpeed] = useState(30); // pixels per second
+  const scriptContainerRef = useRef<HTMLDivElement>(null);
+  const scrollAnimationRef = useRef<number | null>(null);
+  const lastScrollTimeRef = useRef<number>(0);
 
   const getExtForMimeType = (mimeType: string): "webm" | "mp4" =>
     mimeType.includes("mp4") ? "mp4" : "webm";
@@ -285,7 +296,67 @@ export const VideoRecorder = ({
     setTrimEnd(0);
     setVideoDuration(0);
     setPlaybackError(null);
+    stopAutoScroll();
   }, [recordedUrl]);
+
+  // Teleprompter auto-scroll functions
+  const stopAutoScroll = useCallback(() => {
+    if (scrollAnimationRef.current) {
+      cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = null;
+    }
+    setIsAutoScrolling(false);
+  }, []);
+
+  const startAutoScroll = useCallback(() => {
+    if (!scriptContainerRef.current) return;
+    
+    setIsAutoScrolling(true);
+    lastScrollTimeRef.current = performance.now();
+    
+    const animate = (currentTime: number) => {
+      if (!scriptContainerRef.current) {
+        stopAutoScroll();
+        return;
+      }
+      
+      const deltaTime = (currentTime - lastScrollTimeRef.current) / 1000;
+      lastScrollTimeRef.current = currentTime;
+      
+      const container = scriptContainerRef.current;
+      const scrollAmount = scrollSpeed * deltaTime;
+      
+      container.scrollTop += scrollAmount;
+      
+      // Check if we've reached the bottom
+      if (container.scrollTop >= container.scrollHeight - container.clientHeight) {
+        stopAutoScroll();
+        return;
+      }
+      
+      scrollAnimationRef.current = requestAnimationFrame(animate);
+    };
+    
+    scrollAnimationRef.current = requestAnimationFrame(animate);
+  }, [scrollSpeed, stopAutoScroll]);
+
+  const toggleAutoScroll = useCallback(() => {
+    if (isAutoScrolling) {
+      stopAutoScroll();
+    } else {
+      startAutoScroll();
+    }
+  }, [isAutoScrolling, startAutoScroll, stopAutoScroll]);
+
+  const adjustScrollSpeed = useCallback((delta: number) => {
+    setScrollSpeed((prev) => Math.max(10, Math.min(100, prev + delta)));
+  }, []);
+
+  const resetScriptScroll = useCallback(() => {
+    if (scriptContainerRef.current) {
+      scriptContainerRef.current.scrollTop = 0;
+    }
+  }, []);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -638,9 +709,17 @@ export const VideoRecorder = ({
     }
   }, [recordedBlob, lessonId, toast, onVideoUploaded, isTrimMode, createTrimmedVideo, recordedFileExt, recordedMimeType]);
 
+  // Stop auto-scroll when recording stops
+  useEffect(() => {
+    if (!isRecording && isAutoScrolling) {
+      stopAutoScroll();
+    }
+  }, [isRecording, isAutoScrolling, stopAutoScroll]);
+
   useEffect(() => {
     return () => {
       stopAudioAnalyzer();
+      stopAutoScroll();
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -986,20 +1065,97 @@ export const VideoRecorder = ({
         </CardContent>
       </Card>
       
-      {/* Script Panel */}
+      {/* Script Panel with Teleprompter */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle>Video Script</CardTitle>
+          {script && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={resetScriptScroll}
+                title="Scroll to top"
+              >
+                <ChevronsUp className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           {script ? (
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
-                  {script}
-                </pre>
+            <>
+              {/* Teleprompter Controls */}
+              <div className="flex items-center justify-between gap-2 p-2 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={isAutoScrolling ? "default" : "outline"}
+                    onClick={toggleAutoScroll}
+                    className="gap-1"
+                  >
+                    {isAutoScrolling ? (
+                      <>
+                        <Pause className="h-3 w-3" />
+                        Pause
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-3 w-3" />
+                        Auto-Scroll
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={() => adjustScrollSpeed(-10)}
+                    disabled={scrollSpeed <= 10}
+                    title="Slower"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs font-mono w-14 text-center text-muted-foreground">
+                    {scrollSpeed} px/s
+                  </span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={() => adjustScrollSpeed(10)}
+                    disabled={scrollSpeed >= 100}
+                    title="Faster"
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            </ScrollArea>
+              
+              {/* Script Content */}
+              <div 
+                ref={scriptContainerRef}
+                className="h-[350px] overflow-y-auto pr-4 scroll-smooth"
+                style={{ scrollBehavior: isAutoScrolling ? 'auto' : 'smooth' }}
+              >
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <pre className="whitespace-pre-wrap font-sans text-lg leading-relaxed text-foreground">
+                    {script}
+                  </pre>
+                </div>
+              </div>
+              
+              {/* Auto-scroll indicator */}
+              {isAutoScrolling && (
+                <div className="flex items-center justify-center gap-2 text-xs text-primary animate-pulse">
+                  <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  Auto-scrolling...
+                </div>
+              )}
+            </>
           ) : (
             <div className="h-[400px] flex items-center justify-center text-muted-foreground">
               <p>No script available. Generate video content for this lesson first.</p>
