@@ -128,25 +128,8 @@ export const VideoRecorder = ({
     setPeakLevel(0);
   }, []);
 
-  const startAudioAnalyzer = useCallback(async (mediaStream: MediaStream) => {
+  const startAudioAnalyzer = useCallback((mediaStream: MediaStream, audioContext: AudioContext) => {
     try {
-      // Stop any existing analyzer first
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => {});
-      }
-      if (audioAnimationRef.current) {
-        cancelAnimationFrame(audioAnimationRef.current);
-      }
-      
-      // Use webkitAudioContext for Safari compatibility
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      const audioContext = new AudioContextClass();
-      
-      // Resume the audio context (required by browser autoplay policies)
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume();
-      }
-      
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.3;
@@ -154,7 +137,6 @@ export const VideoRecorder = ({
       const source = audioContext.createMediaStreamSource(mediaStream);
       source.connect(analyser);
       
-      audioContextRef.current = audioContext;
       analyserRef.current = analyser;
       
       // Use time domain data for better voice detection
@@ -163,11 +145,6 @@ export const VideoRecorder = ({
       
       const updateLevel = () => {
         if (!analyserRef.current || !audioContextRef.current) return;
-        
-        // Check if context is still running
-        if (audioContextRef.current.state !== 'running') {
-          audioContextRef.current.resume().catch(() => {});
-        }
         
         // Use time domain data instead of frequency data for more accurate voice levels
         analyserRef.current.getByteTimeDomainData(dataArray);
@@ -179,7 +156,7 @@ export const VideoRecorder = ({
           sumSquares += normalized * normalized;
         }
         const rms = Math.sqrt(sumSquares / dataArray.length);
-        const normalizedLevel = Math.min(100, rms * 250); // Scale up for visibility
+        const normalizedLevel = Math.min(100, rms * 300); // Scale up for visibility
         
         // Track peak with decay
         if (normalizedLevel > peak) {
@@ -202,6 +179,18 @@ export const VideoRecorder = ({
 
   const startCamera = useCallback(async () => {
     try {
+      // Create and resume AudioContext IMMEDIATELY on user click (before getUserMedia)
+      // This ensures the context is in 'running' state due to user gesture
+      let audioContext: AudioContext | null = null;
+      if (micEnabled) {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        audioContext = new AudioContextClass();
+        // Force resume immediately while still in user gesture context
+        await audioContext.resume();
+        audioContextRef.current = audioContext;
+        console.log("AudioContext created and resumed, state:", audioContext.state);
+      }
+      
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: cameraEnabled,
         audio: micEnabled,
@@ -212,11 +201,12 @@ export const VideoRecorder = ({
       }
       setIsPreviewing(true);
       
-      // Start audio analyzer immediately when camera starts
-      if (micEnabled) {
-        startAudioAnalyzer(mediaStream);
+      // Start audio analyzer with the pre-created context
+      if (micEnabled && audioContext) {
+        startAudioAnalyzer(mediaStream, audioContext);
       }
     } catch (error) {
+      console.error("Camera/mic error:", error);
       toast({
         title: "Camera access denied",
         description: "Please allow camera and microphone access to record video.",
@@ -378,48 +368,41 @@ export const VideoRecorder = ({
       return;
     }
     
-    // Check if content is scrollable (has overflow)
-    const hasOverflow = container.scrollHeight > container.clientHeight + 5;
-    if (!hasOverflow) {
-      console.log("Auto-scroll: Content does not overflow, nothing to scroll");
-      return;
-    }
+    // Reset to top first to ensure we have room to scroll
+    container.scrollTop = 0;
     
-    // Check if already at the bottom
-    const isAtBottom = container.scrollTop >= container.scrollHeight - container.clientHeight - 5;
-    if (isAtBottom) {
-      console.log("Auto-scroll: Already at bottom, resetting to top");
-      container.scrollTop = 0;
-    }
-    
-    setIsAutoScrolling(true);
-    lastScrollTimeRef.current = performance.now();
-    
-    const animate = (currentTime: number) => {
-      if (!scriptContainerRef.current) {
-        stopAutoScroll();
-        return;
-      }
+    // Small delay to let the scroll reset take effect
+    setTimeout(() => {
+      if (!scriptContainerRef.current) return;
       
-      const deltaTime = (currentTime - lastScrollTimeRef.current) / 1000;
-      lastScrollTimeRef.current = currentTime;
+      setIsAutoScrolling(true);
+      lastScrollTimeRef.current = performance.now();
       
-      const cont = scriptContainerRef.current;
-      const scrollAmount = scrollSpeed * deltaTime;
-      
-      cont.scrollTop += scrollAmount;
-      
-      // Check if we've reached the bottom (with small epsilon for sub-pixel rounding)
-      const distanceToBottom = cont.scrollHeight - cont.clientHeight - cont.scrollTop;
-      if (distanceToBottom <= 1) {
-        stopAutoScroll();
-        return;
-      }
+      const animate = (currentTime: number) => {
+        const cont = scriptContainerRef.current;
+        if (!cont) {
+          stopAutoScroll();
+          return;
+        }
+        
+        const deltaTime = (currentTime - lastScrollTimeRef.current) / 1000;
+        lastScrollTimeRef.current = currentTime;
+        
+        const scrollAmount = scrollSpeed * deltaTime;
+        cont.scrollTop += scrollAmount;
+        
+        // Check if we've reached the bottom (with generous epsilon)
+        const maxScroll = cont.scrollHeight - cont.clientHeight;
+        if (maxScroll > 0 && cont.scrollTop >= maxScroll - 2) {
+          stopAutoScroll();
+          return;
+        }
+        
+        scrollAnimationRef.current = requestAnimationFrame(animate);
+      };
       
       scrollAnimationRef.current = requestAnimationFrame(animate);
-    };
-    
-    scrollAnimationRef.current = requestAnimationFrame(animate);
+    }, 50);
   }, [scrollSpeed, stopAutoScroll]);
 
   const toggleAutoScroll = useCallback(() => {
