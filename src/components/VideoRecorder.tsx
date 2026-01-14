@@ -18,8 +18,11 @@ import {
   MicOff,
   Scissors,
   Play,
-  RotateCcw
+  RotateCcw,
+  AlertTriangle,
+  RefreshCw
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface VideoRecorderProps {
   script?: string;
@@ -62,6 +65,10 @@ export const VideoRecorder = ({
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [isTrimming, setIsTrimming] = useState(false);
+  
+  // Playback error state
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [isFixingPlayback, setIsFixingPlayback] = useState(false);
 
   const getExtForMimeType = (mimeType: string): "webm" | "mp4" =>
     mimeType.includes("mp4") ? "mp4" : "webm";
@@ -203,6 +210,7 @@ export const VideoRecorder = ({
     setTrimStart(0);
     setTrimEnd(0);
     setVideoDuration(0);
+    setPlaybackError(null);
   }, [recordedUrl]);
 
   const formatTime = (seconds: number) => {
@@ -222,6 +230,9 @@ export const VideoRecorder = ({
     const v = playbackVideoRef.current;
     if (!v) return;
 
+    // Clear any previous error since we loaded successfully
+    setPlaybackError(null);
+
     const duration = v.duration;
     if (isFinite(duration) && duration > 0) {
       setVideoDuration(duration);
@@ -234,9 +245,130 @@ export const VideoRecorder = ({
   useEffect(() => {
     const v = playbackVideoRef.current;
     if (recordedUrl && v) {
+      setPlaybackError(null);
       v.load();
     }
   }, [recordedUrl]);
+
+  // Re-encode video to fix playback issues
+  const fixPlayback = useCallback(async () => {
+    if (!recordedBlob) return;
+    
+    setIsFixingPlayback(true);
+    setPlaybackError(null);
+    
+    try {
+      // Create a video element to decode the original
+      const video = document.createElement('video');
+      video.src = recordedUrl!;
+      video.muted = true;
+      video.playsInline = true;
+      
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => resolve();
+        video.onerror = () => reject(new Error("Could not decode video"));
+        setTimeout(() => reject(new Error("Video decode timeout")), 10000);
+      });
+      
+      // Set up canvas for re-encoding
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d')!;
+      
+      const canvasStream = canvas.captureStream(30);
+      
+      // Try different codecs for better compatibility
+      const compatibleMimeTypes = [
+        "video/webm;codecs=vp8",
+        "video/webm",
+      ];
+      
+      let selectedMimeType = "";
+      for (const type of compatibleMimeTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          selectedMimeType = type;
+          break;
+        }
+      }
+      
+      if (!selectedMimeType) {
+        throw new Error("No compatible video codec available");
+      }
+      
+      const mediaRecorder = new MediaRecorder(canvasStream, { mimeType: selectedMimeType });
+      const chunks: Blob[] = [];
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      
+      const duration = video.duration;
+      
+      await new Promise<void>((resolve) => {
+        mediaRecorder.onstop = () => resolve();
+        
+        video.currentTime = 0;
+        
+        video.onseeked = () => {
+          mediaRecorder.start(100);
+          video.play();
+          
+          const drawFrame = () => {
+            if (video.ended || video.currentTime >= duration) {
+              video.pause();
+              mediaRecorder.stop();
+              return;
+            }
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            requestAnimationFrame(drawFrame);
+          };
+          
+          drawFrame();
+          
+          // Fallback timeout
+          setTimeout(() => {
+            if (mediaRecorder.state === 'recording') {
+              video.pause();
+              mediaRecorder.stop();
+            }
+          }, (duration + 2) * 1000);
+        };
+      });
+      
+      const newBlob = new Blob(chunks, { type: selectedMimeType });
+      
+      if (newBlob.size === 0) {
+        throw new Error("Re-encoding produced empty video");
+      }
+      
+      // Clean up old URL
+      if (recordedUrl) {
+        URL.revokeObjectURL(recordedUrl);
+      }
+      
+      const newUrl = URL.createObjectURL(newBlob);
+      setRecordedBlob(newBlob);
+      setRecordedMimeType(selectedMimeType);
+      setRecordedFileExt("webm");
+      setRecordedUrl(newUrl);
+      
+      toast({
+        title: "Video fixed",
+        description: "The recording has been re-encoded for better compatibility.",
+      });
+    } catch (error: any) {
+      console.error("Fix playback error:", error);
+      setPlaybackError(`Re-encoding failed: ${error.message}`);
+      toast({
+        title: "Could not fix video",
+        description: error.message || "Re-encoding failed. Try downloading the original file.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFixingPlayback(false);
+    }
+  }, [recordedBlob, recordedUrl, toast]);
 
   const previewTrimmedSection = useCallback(() => {
     if (playbackVideoRef.current) {
@@ -465,27 +597,64 @@ export const VideoRecorder = ({
           {/* Video Preview */}
           <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
             {recordedUrl ? (
-              <video
-                ref={playbackVideoRef}
-                src={recordedUrl}
-                controls
-                autoPlay={false}
-                playsInline
-                preload="metadata"
-                className="w-full h-full object-cover"
-                onLoadedMetadata={handleVideoLoaded}
-                onError={(e) => {
-                  const code = e.currentTarget.error?.code;
-                  toast({
-                    title: "Playback failed",
-                    description:
-                      code === 4
-                        ? "This recording format isn't supported in your browser."
-                        : "Could not play this recording.",
-                    variant: "destructive",
-                  });
-                }}
-              />
+              <>
+                <video
+                  ref={playbackVideoRef}
+                  src={recordedUrl}
+                  controls
+                  autoPlay={false}
+                  playsInline
+                  preload="auto"
+                  className="w-full h-full object-cover"
+                  onLoadedMetadata={handleVideoLoaded}
+                  onCanPlay={() => setPlaybackError(null)}
+                  onError={(e) => {
+                    const err = e.currentTarget.error;
+                    const code = err?.code;
+                    const codeNames: Record<number, string> = {
+                      1: "MEDIA_ERR_ABORTED",
+                      2: "MEDIA_ERR_NETWORK", 
+                      3: "MEDIA_ERR_DECODE",
+                      4: "MEDIA_ERR_SRC_NOT_SUPPORTED",
+                    };
+                    const errorName = code ? codeNames[code] || `Error ${code}` : "Unknown error";
+                    setPlaybackError(`${errorName}: ${err?.message || "Cannot play this recording"}`);
+                  }}
+                />
+                {/* Playback Error Overlay */}
+                {playbackError && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+                    <div className="text-center p-4 max-w-sm">
+                      <AlertTriangle className="h-10 w-10 text-destructive mx-auto mb-3" />
+                      <p className="font-medium text-foreground mb-1">Playback Error</p>
+                      <p className="text-sm text-muted-foreground mb-4">{playbackError}</p>
+                      <div className="flex gap-2 justify-center">
+                        <Button 
+                          size="sm" 
+                          onClick={fixPlayback} 
+                          disabled={isFixingPlayback}
+                        >
+                          {isFixingPlayback ? (
+                            <>
+                              <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                              Fixing...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                              Fix Playback
+                            </>
+                          )}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={handleDownload}>
+                          <Download className="h-3 w-3 mr-1" />
+                          Download Anyway
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <video
                 ref={videoRef}
@@ -503,7 +672,7 @@ export const VideoRecorder = ({
               </div>
             )}
             
-            {isTrimMode && (
+            {isTrimMode && !playbackError && (
               <div className="absolute top-4 left-4 flex items-center gap-2 bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-medium">
                 <Scissors className="h-3 w-3" />
                 Trim Mode
@@ -517,8 +686,16 @@ export const VideoRecorder = ({
             )}
           </div>
           
+          {/* Recording Info */}
+          {recordedUrl && !playbackError && (
+            <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+              <span>Format: {recordedMimeType}</span>
+              <span>Size: {recordedBlob ? (recordedBlob.size / 1024 / 1024).toFixed(2) + " MB" : "—"}</span>
+            </div>
+          )}
+          
           {/* Trim Controls */}
-          {isTrimMode && videoDuration > 0 && (
+          {isTrimMode && videoDuration > 0 && !playbackError && (
             <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium">Trim Video</span>
@@ -638,10 +815,29 @@ export const VideoRecorder = ({
             
             {recordedUrl && (
               <>
+                {playbackError && (
+                  <Button 
+                    onClick={fixPlayback} 
+                    variant="default"
+                    disabled={isFixingPlayback}
+                  >
+                    {isFixingPlayback ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Fixing...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Fix Playback
+                      </>
+                    )}
+                  </Button>
+                )}
                 <Button 
                   onClick={() => setIsTrimMode(!isTrimMode)} 
                   variant={isTrimMode ? "default" : "outline"}
-                  disabled={isTrimming}
+                  disabled={isTrimming || !!playbackError}
                 >
                   <Scissors className="h-4 w-4 mr-2" />
                   {isTrimMode ? "Done Trimming" : "Trim"}
@@ -651,12 +847,12 @@ export const VideoRecorder = ({
                   {isTrimming ? "Processing..." : "Download"}
                 </Button>
                 {lessonId && (
-                  <Button onClick={handleUpload} disabled={uploading || isTrimming}>
+                  <Button onClick={handleUpload} disabled={uploading || isTrimming || !!playbackError}>
                     <Upload className="h-4 w-4 mr-2" />
                     {uploading ? "Uploading..." : isTrimming ? "Processing..." : "Upload to Lesson"}
                   </Button>
                 )}
-                <Button onClick={resetRecording} variant="ghost" disabled={isTrimming || uploading}>
+                <Button onClick={resetRecording} variant="ghost" disabled={isTrimming || uploading || isFixingPlayback}>
                   Re-record
                 </Button>
               </>
