@@ -820,60 +820,10 @@ export const VideoRecorder = ({
             )}
             
             {isRecording && (
-              <>
-                <div className="absolute top-4 left-4 flex items-center gap-2 bg-destructive text-destructive-foreground px-3 py-1 rounded-full text-sm font-medium animate-pulse">
-                  <Circle className="h-3 w-3 fill-current" />
-                  REC {formatTime(recordingTime)}
-                </div>
-                
-                {/* Audio Level Meter */}
-                {micEnabled && (
-                  <div className="absolute bottom-4 left-4 right-4">
-                    <div className="bg-background/80 backdrop-blur-sm rounded-lg p-2">
-                      <div className="flex items-center gap-2">
-                        <Mic className="h-4 w-4 text-foreground" />
-                        <div className="flex-1 relative h-3 bg-muted rounded-full overflow-hidden">
-                          {/* Level bar */}
-                          <div 
-                            className="absolute inset-y-0 left-0 transition-all duration-75 rounded-full"
-                            style={{ 
-                              width: `${audioLevel}%`,
-                              background: audioLevel > 80 
-                                ? 'hsl(var(--destructive))' 
-                                : audioLevel > 50 
-                                  ? 'hsl(45 100% 50%)' 
-                                  : 'hsl(var(--primary))'
-                            }}
-                          />
-                          {/* Peak indicator */}
-                          <div 
-                            className="absolute inset-y-0 w-0.5 bg-foreground transition-all duration-150"
-                            style={{ left: `${Math.min(peakLevel, 100)}%` }}
-                          />
-                          {/* Level markers */}
-                          <div className="absolute inset-0 flex">
-                            {[25, 50, 75].map((mark) => (
-                              <div 
-                                key={mark}
-                                className="absolute h-full w-px bg-foreground/20"
-                                style={{ left: `${mark}%` }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                        <span className="text-xs font-mono text-foreground w-8 text-right">
-                          {Math.round(audioLevel)}%
-                        </span>
-                      </div>
-                      {audioLevel < 5 && (
-                        <p className="text-xs text-destructive mt-1 text-center">
-                          No audio detected — check your microphone
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </>
+              <div className="absolute top-4 left-4 flex items-center gap-2 bg-destructive text-destructive-foreground px-3 py-1 rounded-full text-sm font-medium animate-pulse">
+                <Circle className="h-3 w-3 fill-current" />
+                REC {formatTime(recordingTime)}
+              </div>
             )}
             
             {isTrimMode && !playbackError && (
@@ -985,6 +935,33 @@ export const VideoRecorder = ({
               >
                 {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
               </Button>
+            </div>
+          )}
+          
+          {/* Audio Level Meter - shown during recording */}
+          {isRecording && micEnabled && (
+            <div className="flex items-center gap-2 px-2">
+              <Mic className="h-3 w-3 text-muted-foreground shrink-0" />
+              <div className="flex-1 relative h-2 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="absolute inset-y-0 left-0 transition-all duration-75 rounded-full"
+                  style={{ 
+                    width: `${audioLevel}%`,
+                    background: audioLevel > 80 
+                      ? 'hsl(var(--destructive))' 
+                      : audioLevel > 50 
+                        ? 'hsl(45 100% 50%)' 
+                        : 'hsl(var(--primary))'
+                  }}
+                />
+                <div 
+                  className="absolute inset-y-0 w-0.5 bg-foreground/50 transition-all duration-150"
+                  style={{ left: `${Math.min(peakLevel, 100)}%` }}
+                />
+              </div>
+              <span className="text-xs font-mono text-muted-foreground w-7 text-right">
+                {Math.round(audioLevel)}%
+              </span>
             </div>
           )}
           
