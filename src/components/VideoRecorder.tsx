@@ -323,6 +323,15 @@ export const VideoRecorder = ({
     }
   }, [isRecording, stopAudioAnalyzer]);
 
+  // Teleprompter auto-scroll functions - defined before resetRecording so it can use stopAutoScroll
+  const stopAutoScroll = useCallback(() => {
+    if (scrollAnimationRef.current) {
+      cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = null;
+    }
+    setIsAutoScrolling(false);
+  }, []);
+
   const resetRecording = useCallback(() => {
     if (recordedUrl) {
       URL.revokeObjectURL(recordedUrl);
@@ -335,25 +344,16 @@ export const VideoRecorder = ({
     setTrimEnd(0);
     setVideoDuration(0);
     setPlaybackError(null);
-    // Stop auto-scroll and reset teleprompter position
-    if (scrollAnimationRef.current) {
-      cancelAnimationFrame(scrollAnimationRef.current);
-      scrollAnimationRef.current = null;
-    }
-    setIsAutoScrolling(false);
-    if (scriptContainerRef.current) {
-      scriptContainerRef.current.scrollTop = 0;
-    }
-  }, [recordedUrl]);
+    // Stop auto-scroll using the proper function and reset teleprompter position
+    stopAutoScroll();
+    // Reset scroll position after a brief delay to ensure DOM is ready
+    setTimeout(() => {
+      if (scriptContainerRef.current) {
+        scriptContainerRef.current.scrollTop = 0;
+      }
+    }, 0);
+  }, [recordedUrl, stopAutoScroll]);
 
-  // Teleprompter auto-scroll functions
-  const stopAutoScroll = useCallback(() => {
-    if (scrollAnimationRef.current) {
-      cancelAnimationFrame(scrollAnimationRef.current);
-      scrollAnimationRef.current = null;
-    }
-    setIsAutoScrolling(false);
-  }, []);
 
   const startAutoScroll = useCallback(() => {
     if (!scriptContainerRef.current) return;
