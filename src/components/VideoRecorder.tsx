@@ -68,6 +68,10 @@ export const VideoRecorder = ({
   const [recordingTime, setRecordingTime] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Countdown state
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  
   // Audio level state
   const [audioLevel, setAudioLevel] = useState(0);
   const [peakLevel, setPeakLevel] = useState(0);
@@ -216,6 +220,39 @@ export const VideoRecorder = ({
     }
     setIsPreviewing(false);
   }, [stream, stopAudioAnalyzer]);
+
+  const initiateRecording = useCallback(() => {
+    if (!stream) return;
+    
+    // Start countdown
+    setCountdown(3);
+    
+    countdownRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          if (countdownRef.current) {
+            clearInterval(countdownRef.current);
+            countdownRef.current = null;
+          }
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    // Start actual recording after 3 seconds
+    setTimeout(() => {
+      startRecording();
+    }, 3000);
+  }, [stream]);
+
+  const cancelCountdown = useCallback(() => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+    setCountdown(null);
+  }, []);
 
   const startRecording = useCallback(() => {
     if (!stream) return;
@@ -851,6 +888,18 @@ export const VideoRecorder = ({
                 <p className="text-muted-foreground">Click "Start Camera" to begin</p>
               </div>
             )}
+            
+            {/* Countdown Overlay */}
+            {countdown !== null && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="text-8xl font-bold text-primary animate-pulse">
+                    {countdown}
+                  </div>
+                  <p className="text-lg text-muted-foreground">Get ready...</p>
+                </div>
+              </div>
+            )}
           </div>
           
           {/* Recording Info */}
@@ -961,9 +1010,9 @@ export const VideoRecorder = ({
                 </Button>
               )}
               
-              {isPreviewing && !isRecording && (
+              {isPreviewing && !isRecording && countdown === null && (
                 <>
-                  <Button onClick={startRecording} variant="destructive">
+                  <Button onClick={initiateRecording} variant="destructive">
                     <Circle className="h-4 w-4 mr-2 fill-current" />
                     Start Recording
                   </Button>
@@ -972,6 +1021,13 @@ export const VideoRecorder = ({
                     Cancel
                   </Button>
                 </>
+              )}
+              
+              {countdown !== null && (
+                <Button onClick={cancelCountdown} variant="outline">
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel Countdown
+                </Button>
               )}
               
               {isRecording && (
