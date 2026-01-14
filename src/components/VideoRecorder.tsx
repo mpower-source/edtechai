@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -14,7 +15,10 @@ import {
   Camera,
   CameraOff,
   Mic,
-  MicOff
+  MicOff,
+  Scissors,
+  Play,
+  RotateCcw
 } from "lucide-react";
 
 interface VideoRecorderProps {
@@ -48,6 +52,13 @@ export const VideoRecorder = ({
   const [micEnabled, setMicEnabled] = useState(true);
   const [recordingTime, setRecordingTime] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Trim state
+  const [isTrimMode, setIsTrimMode] = useState(false);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const [isTrimming, setIsTrimming] = useState(false);
 
   const startCamera = useCallback(async () => {
     try {
@@ -118,10 +129,149 @@ export const VideoRecorder = ({
     }
   }, [isRecording, stopCamera]);
 
-  const handleDownload = useCallback(() => {
+  const resetRecording = useCallback(() => {
+    if (recordedUrl) {
+      URL.revokeObjectURL(recordedUrl);
+    }
+    setRecordedBlob(null);
+    setRecordedUrl(null);
+    setRecordingTime(0);
+    setIsTrimMode(false);
+    setTrimStart(0);
+    setTrimEnd(0);
+    setVideoDuration(0);
+  }, [recordedUrl]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatTimeSeconds = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 10);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms}`;
+  };
+
+  const handleVideoLoaded = useCallback(() => {
+    if (playbackVideoRef.current) {
+      const duration = playbackVideoRef.current.duration;
+      if (isFinite(duration) && duration > 0) {
+        setVideoDuration(duration);
+        setTrimEnd(duration);
+      }
+      playbackVideoRef.current.currentTime = 0;
+    }
+  }, []);
+
+  const previewTrimmedSection = useCallback(() => {
+    if (playbackVideoRef.current) {
+      playbackVideoRef.current.currentTime = trimStart;
+      playbackVideoRef.current.play();
+      
+      const checkTime = () => {
+        if (playbackVideoRef.current && playbackVideoRef.current.currentTime >= trimEnd) {
+          playbackVideoRef.current.pause();
+          playbackVideoRef.current.currentTime = trimStart;
+        } else if (playbackVideoRef.current && !playbackVideoRef.current.paused) {
+          requestAnimationFrame(checkTime);
+        }
+      };
+      requestAnimationFrame(checkTime);
+    }
+  }, [trimStart, trimEnd]);
+
+  const createTrimmedVideo = useCallback(async (): Promise<Blob | null> => {
+    if (!recordedUrl || !recordedBlob) return null;
+    
+    // If no trimming needed, return original
+    if (trimStart === 0 && trimEnd === videoDuration) {
+      return recordedBlob;
+    }
+
+    setIsTrimming(true);
+    
+    try {
+      const video = document.createElement('video');
+      video.src = recordedUrl;
+      video.muted = true;
+      
+      await new Promise<void>((resolve) => {
+        video.onloadedmetadata = () => resolve();
+      });
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d')!;
+      
+      const canvasStream = canvas.captureStream(30);
+      
+      const mediaRecorder = new MediaRecorder(canvasStream, {
+        mimeType: 'video/webm;codecs=vp9',
+      });
+      
+      const chunks: Blob[] = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      
+      const trimDuration = trimEnd - trimStart;
+      
+      return new Promise((resolve) => {
+        mediaRecorder.onstop = () => {
+          const trimmedBlob = new Blob(chunks, { type: 'video/webm' });
+          resolve(trimmedBlob);
+        };
+        
+        video.currentTime = trimStart;
+        
+        video.onseeked = () => {
+          mediaRecorder.start();
+          video.play();
+          
+          const drawFrame = () => {
+            if (video.currentTime >= trimEnd || video.ended) {
+              video.pause();
+              mediaRecorder.stop();
+              return;
+            }
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            requestAnimationFrame(drawFrame);
+          };
+          
+          drawFrame();
+          
+          setTimeout(() => {
+            if (mediaRecorder.state === 'recording') {
+              video.pause();
+              mediaRecorder.stop();
+            }
+          }, (trimDuration + 1) * 1000);
+        };
+      });
+    } catch (error) {
+      console.error('Trim error:', error);
+      toast({
+        title: "Trim failed",
+        description: "Could not trim video. Using original.",
+        variant: "destructive",
+      });
+      return recordedBlob;
+    } finally {
+      setIsTrimming(false);
+    }
+  }, [recordedUrl, recordedBlob, trimStart, trimEnd, videoDuration, toast]);
+
+  const handleDownload = useCallback(async () => {
     if (!recordedBlob) return;
     
-    const url = URL.createObjectURL(recordedBlob);
+    const blobToDownload = isTrimMode ? await createTrimmedVideo() : recordedBlob;
+    if (!blobToDownload) return;
+    
+    const url = URL.createObjectURL(blobToDownload);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${lessonTitle || 'lesson'}-video.webm`;
@@ -132,9 +282,9 @@ export const VideoRecorder = ({
     
     toast({
       title: "Video downloaded",
-      description: "Your recording has been saved to your device.",
+      description: isTrimMode ? "Trimmed video saved to your device." : "Your recording has been saved to your device.",
     });
-  }, [recordedBlob, lessonTitle, toast]);
+  }, [recordedBlob, lessonTitle, toast, isTrimMode, createTrimmedVideo]);
 
   const handleUpload = useCallback(async () => {
     if (!recordedBlob || !lessonId) {
@@ -149,6 +299,9 @@ export const VideoRecorder = ({
     setUploading(true);
     
     try {
+      const blobToUpload = isTrimMode ? await createTrimmedVideo() : recordedBlob;
+      if (!blobToUpload) throw new Error("Failed to process video");
+      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
       
@@ -156,7 +309,7 @@ export const VideoRecorder = ({
       
       const { error: uploadError } = await supabase.storage
         .from('lesson-videos')
-        .upload(fileName, recordedBlob, {
+        .upload(fileName, blobToUpload, {
           contentType: 'video/webm',
           upsert: true,
         });
@@ -167,7 +320,6 @@ export const VideoRecorder = ({
         .from('lesson-videos')
         .getPublicUrl(fileName);
       
-      // Update the lesson with the video URL
       const { error: updateError } = await supabase
         .from('lessons')
         .update({ video_url: publicUrl })
@@ -177,7 +329,7 @@ export const VideoRecorder = ({
       
       toast({
         title: "Video uploaded",
-        description: "Your recording has been attached to the lesson.",
+        description: isTrimMode ? "Trimmed video attached to the lesson." : "Your recording has been attached to the lesson.",
       });
       
       onVideoUploaded?.(publicUrl);
@@ -190,22 +342,7 @@ export const VideoRecorder = ({
     } finally {
       setUploading(false);
     }
-  }, [recordedBlob, lessonId, toast, onVideoUploaded]);
-
-  const resetRecording = useCallback(() => {
-    if (recordedUrl) {
-      URL.revokeObjectURL(recordedUrl);
-    }
-    setRecordedBlob(null);
-    setRecordedUrl(null);
-    setRecordingTime(0);
-  }, [recordedUrl]);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, [recordedBlob, lessonId, toast, onVideoUploaded, isTrimMode, createTrimmedVideo]);
 
   useEffect(() => {
     return () => {
@@ -243,16 +380,11 @@ export const VideoRecorder = ({
               <video
                 ref={playbackVideoRef}
                 src={recordedUrl}
-                controls
+                controls={!isTrimMode}
                 autoPlay={false}
                 playsInline
                 className="w-full h-full object-cover"
-                onLoadedData={() => {
-                  // Ensure video is ready for playback
-                  if (playbackVideoRef.current) {
-                    playbackVideoRef.current.currentTime = 0;
-                  }
-                }}
+                onLoadedData={handleVideoLoaded}
               />
             ) : (
               <video
@@ -271,12 +403,87 @@ export const VideoRecorder = ({
               </div>
             )}
             
+            {isTrimMode && (
+              <div className="absolute top-4 left-4 flex items-center gap-2 bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-medium">
+                <Scissors className="h-3 w-3" />
+                Trim Mode
+              </div>
+            )}
+            
             {!isPreviewing && !recordedUrl && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <p className="text-muted-foreground">Click "Start Camera" to begin</p>
               </div>
             )}
           </div>
+          
+          {/* Trim Controls */}
+          {isTrimMode && videoDuration > 0 && (
+            <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">Trim Video</span>
+                <span className="text-muted-foreground">
+                  Duration: {formatTimeSeconds(trimEnd - trimStart)}
+                </span>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span>Start: {formatTimeSeconds(trimStart)}</span>
+                  </div>
+                  <Slider
+                    value={[trimStart]}
+                    min={0}
+                    max={videoDuration}
+                    step={0.1}
+                    onValueChange={([value]) => {
+                      setTrimStart(Math.min(value, trimEnd - 0.5));
+                      if (playbackVideoRef.current) {
+                        playbackVideoRef.current.currentTime = value;
+                      }
+                    }}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span>End: {formatTimeSeconds(trimEnd)}</span>
+                  </div>
+                  <Slider
+                    value={[trimEnd]}
+                    min={0}
+                    max={videoDuration}
+                    step={0.1}
+                    onValueChange={([value]) => {
+                      setTrimEnd(Math.max(value, trimStart + 0.5));
+                      if (playbackVideoRef.current) {
+                        playbackVideoRef.current.currentTime = value;
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={previewTrimmedSection}>
+                  <Play className="h-3 w-3 mr-1" />
+                  Preview Selection
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={() => {
+                    setTrimStart(0);
+                    setTrimEnd(videoDuration);
+                  }}
+                >
+                  <RotateCcw className="h-3 w-3 mr-1" />
+                  Reset
+                </Button>
+              </div>
+            </div>
+          )}
           
           {/* Camera/Mic Controls */}
           {!recordedUrl && (
@@ -331,17 +538,25 @@ export const VideoRecorder = ({
             
             {recordedUrl && (
               <>
-                <Button onClick={handleDownload} variant="outline">
+                <Button 
+                  onClick={() => setIsTrimMode(!isTrimMode)} 
+                  variant={isTrimMode ? "default" : "outline"}
+                  disabled={isTrimming}
+                >
+                  <Scissors className="h-4 w-4 mr-2" />
+                  {isTrimMode ? "Done Trimming" : "Trim"}
+                </Button>
+                <Button onClick={handleDownload} variant="outline" disabled={isTrimming || uploading}>
                   <Download className="h-4 w-4 mr-2" />
-                  Download
+                  {isTrimming ? "Processing..." : "Download"}
                 </Button>
                 {lessonId && (
-                  <Button onClick={handleUpload} disabled={uploading}>
+                  <Button onClick={handleUpload} disabled={uploading || isTrimming}>
                     <Upload className="h-4 w-4 mr-2" />
-                    {uploading ? "Uploading..." : "Upload to Lesson"}
+                    {uploading ? "Uploading..." : isTrimming ? "Processing..." : "Upload to Lesson"}
                   </Button>
                 )}
-                <Button onClick={resetRecording} variant="ghost">
+                <Button onClick={resetRecording} variant="ghost" disabled={isTrimming || uploading}>
                   Re-record
                 </Button>
               </>
