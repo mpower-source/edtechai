@@ -169,7 +169,22 @@ const Lessons = () => {
     if (!lesson.video_content) {
       setGeneratingScript(lesson.id);
       try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+
+        if (!accessToken) {
+          toast({
+            title: "Please sign in",
+            description: "You need to be signed in to generate a script.",
+            variant: "destructive",
+          });
+          return;
+        }
+
         const { data, error } = await supabase.functions.invoke('generate-video-content', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
           body: {
             lessonTitle: lesson.title,
             lessonDescription: lesson.description,
@@ -260,7 +275,17 @@ const Lessons = () => {
     };
 
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error("You must be signed in to generate content.");
+      }
+
       const { data, error } = await supabase.functions.invoke(functionMap[contentType], {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: contentType === 'text' 
           ? {
               lessonTitle: lesson.title,

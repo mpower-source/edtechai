@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.84.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,7 +20,7 @@ serve(async (req) => {
   }
 
   try {
-    // Verify JWT authentication
+    // Verify JWT authentication (signing-keys compatible)
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(
@@ -29,6 +29,8 @@ serve(async (req) => {
       );
     }
 
+    const token = authHeader.replace('Bearer ', '').trim();
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     
@@ -36,8 +38,10 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } }
     });
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    const userId = claimsData?.claims?.sub;
+
+    if (claimsError || !userId) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -62,7 +66,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    console.log("Generating video content for user:", user.id, "lesson:", lessonTitle);
+    console.log("Generating video content for user:", userId, "lesson:", lessonTitle);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -102,6 +106,8 @@ Format with clear timestamps and visual cues. Estimated total duration: 8-12 min
     });
 
     if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
           status: 429,
@@ -116,7 +122,11 @@ Format with clear timestamps and visual cues. Estimated total duration: 8-12 min
         });
       }
 
-      throw new Error("AI generation failed");
+      console.error("AI generation failed:", response.status, errText);
+      return new Response(JSON.stringify({ error: "AI generation failed", status: response.status, details: errText }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const data = await response.json();
