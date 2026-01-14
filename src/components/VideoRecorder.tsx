@@ -46,6 +46,11 @@ export const VideoRecorder = ({
   const chunksRef = useRef<Blob[]>([]);
   const recordingMimeTypeRef = useRef<string | null>(null);
   
+  // Audio analyzer refs
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioAnimationRef = useRef<number | null>(null);
+  
   const [isRecording, setIsRecording] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
@@ -58,6 +63,10 @@ export const VideoRecorder = ({
   const [micEnabled, setMicEnabled] = useState(true);
   const [recordingTime, setRecordingTime] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Audio level state
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [peakLevel, setPeakLevel] = useState(0);
   
   // Trim state
   const [isTrimMode, setIsTrimMode] = useState(false);
@@ -110,13 +119,76 @@ export const VideoRecorder = ({
     }
   }, [cameraEnabled, micEnabled, toast]);
 
+  const stopAudioAnalyzer = useCallback(() => {
+    if (audioAnimationRef.current) {
+      cancelAnimationFrame(audioAnimationRef.current);
+      audioAnimationRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setAudioLevel(0);
+    setPeakLevel(0);
+  }, []);
+
+  const startAudioAnalyzer = useCallback((mediaStream: MediaStream) => {
+    try {
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.5;
+      
+      const source = audioContext.createMediaStreamSource(mediaStream);
+      source.connect(analyser);
+      
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+      
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let peak = 0;
+      
+      const updateLevel = () => {
+        if (!analyserRef.current) return;
+        
+        analyserRef.current.getByteFrequencyData(dataArray);
+        
+        // Calculate average level
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / dataArray.length;
+        const normalizedLevel = Math.min(100, (average / 128) * 100);
+        
+        // Track peak with decay
+        if (normalizedLevel > peak) {
+          peak = normalizedLevel;
+        } else {
+          peak = Math.max(0, peak - 0.5);
+        }
+        
+        setAudioLevel(normalizedLevel);
+        setPeakLevel(peak);
+        
+        audioAnimationRef.current = requestAnimationFrame(updateLevel);
+      };
+      
+      updateLevel();
+    } catch (error) {
+      console.error("Audio analyzer error:", error);
+    }
+  }, []);
+
   const stopCamera = useCallback(() => {
+    stopAudioAnalyzer();
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
     setIsPreviewing(false);
-  }, [stream]);
+  }, [stream, stopAudioAnalyzer]);
 
   const startRecording = useCallback(() => {
     if (!stream) return;
@@ -148,7 +220,6 @@ export const VideoRecorder = ({
               "No video data was captured. Please try again (and ensure camera/mic permissions are granted).",
             variant: "destructive",
           });
-          // Important: stop tracks AFTER MediaRecorder has finalized data
           stopCamera();
           return;
         }
@@ -158,15 +229,18 @@ export const VideoRecorder = ({
         setRecordedFileExt(getExtForMimeType(finalMimeType));
         setRecordedUrl(URL.createObjectURL(blob));
 
-        // Important: stop tracks AFTER MediaRecorder has finalized data
         stopCamera();
       };
 
       mediaRecorderRef.current = mediaRecorder;
-      // timeslice improves reliability of dataavailable in some browsers
       mediaRecorder.start(250);
       setIsRecording(true);
       setRecordingTime(0);
+
+      // Start audio analyzer for level meter
+      if (micEnabled) {
+        startAudioAnalyzer(stream);
+      }
 
       timerRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
@@ -180,24 +254,24 @@ export const VideoRecorder = ({
         variant: "destructive",
       });
     }
-  }, [stream, stopCamera, toast]);
+  }, [stream, stopCamera, toast, micEnabled, startAudioAnalyzer]);
 
   const stopRecording = useCallback(() => {
     const mr = mediaRecorderRef.current;
     if (mr && isRecording) {
       try {
-        // Flush buffered chunks before stopping (fixes empty/unplayable blobs in some browsers)
         mr.requestData?.();
       } catch {
         // ignore
       }
       mr.stop();
       setIsRecording(false);
+      stopAudioAnalyzer();
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     }
-  }, [isRecording]);
+  }, [isRecording, stopAudioAnalyzer]);
 
   const resetRecording = useCallback(() => {
     if (recordedUrl) {
@@ -566,6 +640,7 @@ export const VideoRecorder = ({
 
   useEffect(() => {
     return () => {
+      stopAudioAnalyzer();
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -576,7 +651,7 @@ export const VideoRecorder = ({
         URL.revokeObjectURL(recordedUrl);
       }
     };
-  }, [stream, recordedUrl]);
+  }, [stream, recordedUrl, stopAudioAnalyzer]);
 
   return (
     <div className="grid lg:grid-cols-2 gap-6">
@@ -666,10 +741,60 @@ export const VideoRecorder = ({
             )}
             
             {isRecording && (
-              <div className="absolute top-4 left-4 flex items-center gap-2 bg-destructive text-destructive-foreground px-3 py-1 rounded-full text-sm font-medium animate-pulse">
-                <Circle className="h-3 w-3 fill-current" />
-                REC {formatTime(recordingTime)}
-              </div>
+              <>
+                <div className="absolute top-4 left-4 flex items-center gap-2 bg-destructive text-destructive-foreground px-3 py-1 rounded-full text-sm font-medium animate-pulse">
+                  <Circle className="h-3 w-3 fill-current" />
+                  REC {formatTime(recordingTime)}
+                </div>
+                
+                {/* Audio Level Meter */}
+                {micEnabled && (
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <div className="bg-background/80 backdrop-blur-sm rounded-lg p-2">
+                      <div className="flex items-center gap-2">
+                        <Mic className="h-4 w-4 text-foreground" />
+                        <div className="flex-1 relative h-3 bg-muted rounded-full overflow-hidden">
+                          {/* Level bar */}
+                          <div 
+                            className="absolute inset-y-0 left-0 transition-all duration-75 rounded-full"
+                            style={{ 
+                              width: `${audioLevel}%`,
+                              background: audioLevel > 80 
+                                ? 'hsl(var(--destructive))' 
+                                : audioLevel > 50 
+                                  ? 'hsl(45 100% 50%)' 
+                                  : 'hsl(var(--primary))'
+                            }}
+                          />
+                          {/* Peak indicator */}
+                          <div 
+                            className="absolute inset-y-0 w-0.5 bg-foreground transition-all duration-150"
+                            style={{ left: `${Math.min(peakLevel, 100)}%` }}
+                          />
+                          {/* Level markers */}
+                          <div className="absolute inset-0 flex">
+                            {[25, 50, 75].map((mark) => (
+                              <div 
+                                key={mark}
+                                className="absolute h-full w-px bg-foreground/20"
+                                style={{ left: `${mark}%` }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <span className="text-xs font-mono text-foreground w-8 text-right">
+                          {Math.round(audioLevel)}%
+                        </span>
+                      </div>
+                      {audioLevel < 5 && (
+                        <p className="text-xs text-destructive mt-1 text-center">
+                          No audio detected — check your microphone
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             
             {isTrimMode && !playbackError && (
