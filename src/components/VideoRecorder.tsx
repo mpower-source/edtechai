@@ -126,10 +126,18 @@ export const VideoRecorder = ({
 
   const startAudioAnalyzer = useCallback((mediaStream: MediaStream) => {
     try {
+      // Stop any existing analyzer first
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+      }
+      if (audioAnimationRef.current) {
+        cancelAnimationFrame(audioAnimationRef.current);
+      }
+      
       const audioContext = new AudioContext();
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.5;
+      analyser.smoothingTimeConstant = 0.3;
       
       const source = audioContext.createMediaStreamSource(mediaStream);
       source.connect(analyser);
@@ -137,27 +145,30 @@ export const VideoRecorder = ({
       audioContextRef.current = audioContext;
       analyserRef.current = analyser;
       
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      // Use time domain data for better voice detection
+      const dataArray = new Uint8Array(analyser.fftSize);
       let peak = 0;
       
       const updateLevel = () => {
         if (!analyserRef.current) return;
         
-        analyserRef.current.getByteFrequencyData(dataArray);
+        // Use time domain data instead of frequency data for more accurate voice levels
+        analyserRef.current.getByteTimeDomainData(dataArray);
         
-        // Calculate average level
-        let sum = 0;
+        // Calculate RMS (root mean square) for better audio level representation
+        let sumSquares = 0;
         for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
+          const normalized = (dataArray[i] - 128) / 128;
+          sumSquares += normalized * normalized;
         }
-        const average = sum / dataArray.length;
-        const normalizedLevel = Math.min(100, (average / 128) * 100);
+        const rms = Math.sqrt(sumSquares / dataArray.length);
+        const normalizedLevel = Math.min(100, rms * 200); // Scale up for visibility
         
         // Track peak with decay
         if (normalizedLevel > peak) {
           peak = normalizedLevel;
         } else {
-          peak = Math.max(0, peak - 0.5);
+          peak = Math.max(0, peak - 0.3);
         }
         
         setAudioLevel(normalizedLevel);
@@ -1132,8 +1143,7 @@ export const VideoRecorder = ({
               {/* Script Content */}
               <div 
                 ref={scriptContainerRef}
-                className="h-[350px] overflow-y-auto pr-4 scroll-smooth"
-                style={{ scrollBehavior: isAutoScrolling ? 'auto' : 'smooth' }}
+                className="h-[350px] overflow-y-auto pr-4"
               >
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   <pre className="whitespace-pre-wrap font-sans text-lg leading-relaxed text-foreground">
