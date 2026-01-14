@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Sparkles, Trash2, Save, Video, ClipboardList, FileText, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, Sparkles, Trash2, Save, Video, ClipboardList, FileText, Pencil, Camera } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
+import { VideoRecorder } from "@/components/VideoRecorder";
 
 type Lesson = Database["public"]["Tables"]["lessons"]["Row"];
 type LessonType = Database["public"]["Enums"]["lesson_type"];
@@ -24,6 +25,7 @@ const Lessons = () => {
   const [course, setCourse] = useState<any>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [editingLesson, setEditingLesson] = useState<Partial<Lesson> | null>(null);
+  const [recordingLesson, setRecordingLesson] = useState<Lesson | null>(null);
 
   useEffect(() => {
     fetchCourseAndLessons();
@@ -279,6 +281,29 @@ const Lessons = () => {
             </CardContent>
           </Card>
 
+          {recordingLesson && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Camera className="h-5 w-5" />
+                  Record Video: {recordingLesson.title}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <VideoRecorder
+                  script={recordingLesson.video_content || undefined}
+                  lessonId={recordingLesson.id}
+                  lessonTitle={recordingLesson.title}
+                  onVideoUploaded={() => {
+                    setRecordingLesson(null);
+                    fetchCourseAndLessons();
+                  }}
+                  onClose={() => setRecordingLesson(null)}
+                />
+              </CardContent>
+            </Card>
+          )}
+
           {editingLesson && (
             <Card>
               <CardHeader>
@@ -492,6 +517,15 @@ const Lessons = () => {
                           {generatingContent?.type === 'video' && generatingContent?.lessonId === lesson.id 
                             ? "Generating..." 
                             : "Video"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setRecordingLesson(lesson)}
+                          title="Record video"
+                        >
+                          <Camera className="h-4 w-4 mr-1" />
+                          Record
                         </Button>
                         <Button
                           variant="outline"
