@@ -353,19 +353,6 @@ const Lessons = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="video_content">Video Content/Script</Label>
-                  <Textarea
-                    id="video_content"
-                    value={(editingLesson as any).video_content || ""}
-                    onChange={(e) =>
-                      setEditingLesson({ ...editingLesson, video_content: e.target.value } as any)
-                    }
-                    placeholder="Video script content"
-                    rows={5}
-                  />
-                </div>
-
-                <div className="space-y-2">
                   <Label htmlFor="quiz_content">Quiz Content</Label>
                   <Textarea
                     id="quiz_content"
@@ -387,6 +374,19 @@ const Lessons = () => {
                       setEditingLesson({ ...editingLesson, assignment_content: e.target.value } as any)
                     }
                     placeholder="Assignment content"
+                    rows={5}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="video_content">Video Content/Script</Label>
+                  <Textarea
+                    id="video_content"
+                    value={(editingLesson as any).video_content || ""}
+                    onChange={(e) =>
+                      setEditingLesson({ ...editingLesson, video_content: e.target.value } as any)
+                    }
+                    placeholder="Video script content"
                     rows={5}
                   />
                 </div>
@@ -510,17 +510,6 @@ const Lessons = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleGenerateContent(lesson, 'video')}
-                          disabled={generatingContent?.lessonId === lesson.id}
-                        >
-                          <Video className="h-4 w-4 mr-1" />
-                          {generatingContent?.type === 'video' && generatingContent?.lessonId === lesson.id 
-                            ? "Generating..." 
-                            : "Video"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
                           onClick={() => setRecordingLesson(lesson)}
                           title="Record video"
                         >
@@ -548,6 +537,17 @@ const Lessons = () => {
                           {generatingContent?.type === 'assignment' && generatingContent?.lessonId === lesson.id 
                             ? "Generating..." 
                             : "Assignment"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleGenerateContent(lesson, 'video')}
+                          disabled={generatingContent?.lessonId === lesson.id}
+                        >
+                          <Video className="h-4 w-4 mr-1" />
+                          {generatingContent?.type === 'video' && generatingContent?.lessonId === lesson.id 
+                            ? "Generating..." 
+                            : "Video"}
                         </Button>
                         <Button
                           variant="outline"
