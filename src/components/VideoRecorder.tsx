@@ -54,7 +54,9 @@ export const VideoRecorder = ({
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioAnimationRef = useRef<number | null>(null);
-  
+  const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const audioMeterGainRef = useRef<GainNode | null>(null);
+
   const [isRecording, setIsRecording] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
@@ -67,26 +69,26 @@ export const VideoRecorder = ({
   const [micEnabled, setMicEnabled] = useState(true);
   const [recordingTime, setRecordingTime] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Countdown state
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Audio level state
   const [audioLevel, setAudioLevel] = useState(0);
   const [peakLevel, setPeakLevel] = useState(0);
-  
+
   // Trim state
   const [isTrimMode, setIsTrimMode] = useState(false);
   const [videoDuration, setVideoDuration] = useState(0);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [isTrimming, setIsTrimming] = useState(false);
-  
+
   // Playback error state
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [isFixingPlayback, setIsFixingPlayback] = useState(false);
-  
+
   // Teleprompter state
   const [isAutoScrolling, setIsAutoScrolling] = useState(false);
   const [scrollSpeed, setScrollSpeed] = useState(10); // pixels per second
@@ -114,87 +116,122 @@ export const VideoRecorder = ({
 
     return "";
   };
+
   const stopAudioAnalyzer = useCallback(() => {
     if (audioAnimationRef.current) {
       cancelAnimationFrame(audioAnimationRef.current);
       audioAnimationRef.current = null;
     }
+
+    try {
+      analyserRef.current?.disconnect();
+    } catch {
+      // ignore
+    }
+    try {
+      audioSourceRef.current?.disconnect();
+    } catch {
+      // ignore
+    }
+    try {
+      audioMeterGainRef.current?.disconnect();
+    } catch {
+      // ignore
+    }
+
+    analyserRef.current = null;
+    audioSourceRef.current = null;
+    audioMeterGainRef.current = null;
+
     if (audioContextRef.current) {
       audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
     }
-    analyserRef.current = null;
+
     setAudioLevel(0);
     setPeakLevel(0);
   }, []);
 
-  const startAudioAnalyzer = useCallback(
-    (mediaStream: MediaStream, audioContext: AudioContext) => {
-      try {
-        const audioTracks = mediaStream.getAudioTracks();
-        if (!audioTracks.length) {
-          console.warn("Audio analyzer: no audio tracks on stream");
-          return;
-        }
+  const startAudioAnalyzer = useCallback((mediaStream: MediaStream, audioContext: AudioContext) => {
+    try {
+      const audioTracks = mediaStream.getAudioTracks();
+      if (!audioTracks.length) {
+        console.warn("Audio analyzer: no audio tracks on stream");
+        return;
+      }
 
-        // Some browsers are more reliable if we analyze an audio-only stream.
-        const audioOnlyStream = new MediaStream(audioTracks);
+      // Keep references so Safari/Chromium don't GC the graph.
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.2;
 
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.3;
+      const source = audioContext.createMediaStreamSource(mediaStream);
+      source.connect(analyser);
 
-        const source = audioContext.createMediaStreamSource(audioOnlyStream);
-        source.connect(analyser);
+      // Keep the audio graph 'alive' (some browsers can output flat lines otherwise)
+      const silentGain = audioContext.createGain();
+      silentGain.gain.value = 0;
+      analyser.connect(silentGain);
+      silentGain.connect(audioContext.destination);
 
-        // Keep the audio graph 'alive' (Safari can output flat 128s otherwise)
-        const silentGain = audioContext.createGain();
-        silentGain.gain.value = 0;
-        analyser.connect(silentGain);
-        silentGain.connect(audioContext.destination);
+      analyserRef.current = analyser;
+      audioSourceRef.current = source;
+      audioMeterGainRef.current = silentGain;
 
-        analyserRef.current = analyser;
+      // Prefer float time-domain data when available.
+      const floatData = new Float32Array(analyser.fftSize);
+      const byteData = new Uint8Array(analyser.fftSize);
+      let peak = 0;
 
-        const dataArray = new Uint8Array(analyser.fftSize);
-        let peak = 0;
+      // Best-effort: ensure context is running (may already be running from startCamera)
+      if (audioContext.state !== "running") {
+        audioContext.resume().catch(() => {});
+      }
 
-        const updateLevel = () => {
-          if (!analyserRef.current || !audioContextRef.current) return;
+      const updateLevel = () => {
+        if (!analyserRef.current || !audioContextRef.current) return;
 
-          // Ensure context stays running
-          if (audioContextRef.current.state !== "running") {
-            audioContextRef.current.resume().catch(() => {});
-          }
+        let rms = 0;
 
-          analyserRef.current.getByteTimeDomainData(dataArray);
-
+        try {
+          analyserRef.current.getFloatTimeDomainData(floatData);
           let sumSquares = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            const normalized = (dataArray[i] - 128) / 128;
+          for (let i = 0; i < floatData.length; i++) {
+            const v = floatData[i];
+            sumSquares += v * v;
+          }
+          rms = Math.sqrt(sumSquares / floatData.length);
+        } catch {
+          // Fallback for older browsers
+          analyserRef.current.getByteTimeDomainData(byteData);
+          let sumSquares = 0;
+          for (let i = 0; i < byteData.length; i++) {
+            const normalized = (byteData[i] - 128) / 128;
             sumSquares += normalized * normalized;
           }
-          const rms = Math.sqrt(sumSquares / dataArray.length);
-          const normalizedLevel = Math.min(100, rms * 500);
+          rms = Math.sqrt(sumSquares / byteData.length);
+        }
 
-          if (normalizedLevel > peak) {
-            peak = normalizedLevel;
-          } else {
-            peak = Math.max(0, peak - 0.3);
-          }
+        // Scale RMS to 0-100 UI range
+        const normalizedLevel = Math.min(100, rms * 2000);
 
-          setAudioLevel(normalizedLevel);
-          setPeakLevel(peak);
+        if (normalizedLevel > peak) {
+          peak = normalizedLevel;
+        } else {
+          peak = Math.max(0, peak - 0.6);
+        }
 
-          audioAnimationRef.current = requestAnimationFrame(updateLevel);
-        };
+        setAudioLevel(normalizedLevel);
+        setPeakLevel(peak);
 
-        updateLevel();
-      } catch (error) {
-        console.error("Audio analyzer error:", error);
-      }
-    },
-    []
-  );
+        audioAnimationRef.current = requestAnimationFrame(updateLevel);
+      };
+
+      updateLevel();
+    } catch (error) {
+      console.error("Audio analyzer error:", error);
+    }
+  }, []);
 
   const startCamera = useCallback(async () => {
     try {
