@@ -938,8 +938,8 @@ export const VideoRecorder = ({
             </div>
           )}
           
-          {/* Audio Level Meter - shown during recording */}
-          {isRecording && micEnabled && (
+          {/* Audio Level Meter - shown when camera is active */}
+          {isPreviewing && micEnabled && (
             <div className="flex items-center gap-2 px-2">
               <Mic className="h-3 w-3 text-muted-foreground shrink-0" />
               <div className="flex-1 relative h-2 bg-muted rounded-full overflow-hidden">
