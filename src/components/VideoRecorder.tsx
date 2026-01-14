@@ -5,6 +5,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useVirtualBackground, VIRTUAL_BACKGROUNDS } from "@/hooks/useVirtualBackground";
+import { VirtualBackgroundSelector } from "@/components/VirtualBackgroundSelector";
 import { 
   Video, 
   Square, 
@@ -24,7 +26,8 @@ import {
   RefreshCw,
   ChevronUp,
   ChevronDown,
-  ChevronsUp
+  ChevronsUp,
+  Loader2
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -46,6 +49,7 @@ export const VideoRecorder = ({
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const playbackVideoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordingMimeTypeRef = useRef<string | null>(null);
@@ -89,6 +93,15 @@ export const VideoRecorder = ({
   const scriptContainerRef = useRef<HTMLDivElement>(null);
   const scrollAnimationRef = useRef<number | null>(null);
   const lastScrollTimeRef = useRef<number>(0);
+  
+  // Virtual background state
+  const [selectedBackgroundId, setSelectedBackgroundId] = useState<string>("none");
+  const virtualBackgroundEnabled = selectedBackgroundId !== "none";
+  
+  const virtualBackground = useVirtualBackground({
+    enabled: virtualBackgroundEnabled,
+    backgroundId: selectedBackgroundId,
+  });
 
   const getExtForMimeType = (mimeType: string): "webm" | "mp4" =>
     mimeType.includes("mp4") ? "mp4" : "webm";
@@ -113,12 +126,25 @@ export const VideoRecorder = ({
   const startCamera = useCallback(async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: cameraEnabled,
+        video: cameraEnabled ? { width: 1280, height: 720 } : false,
         audio: micEnabled,
       });
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        
+        // Initialize virtual background if enabled
+        if (virtualBackgroundEnabled && canvasRef.current) {
+          // Wait for video to be ready
+          videoRef.current.onloadedmetadata = async () => {
+            if (videoRef.current && canvasRef.current) {
+              canvasRef.current.width = videoRef.current.videoWidth || 1280;
+              canvasRef.current.height = videoRef.current.videoHeight || 720;
+              await virtualBackground.initialize(videoRef.current, canvasRef.current);
+              virtualBackground.startProcessing();
+            }
+          };
+        }
       }
       setIsPreviewing(true);
     } catch (error) {
@@ -128,7 +154,7 @@ export const VideoRecorder = ({
         variant: "destructive",
       });
     }
-  }, [cameraEnabled, micEnabled, toast]);
+  }, [cameraEnabled, micEnabled, toast, virtualBackgroundEnabled, virtualBackground]);
 
   const stopAudioAnalyzer = useCallback(() => {
     if (audioAnimationRef.current) {
@@ -194,12 +220,13 @@ export const VideoRecorder = ({
 
   const stopCamera = useCallback(() => {
     stopAudioAnalyzer();
+    virtualBackground.stopProcessing();
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
     setIsPreviewing(false);
-  }, [stream, stopAudioAnalyzer]);
+  }, [stream, stopAudioAnalyzer, virtualBackground]);
 
   const startRecording = useCallback(() => {
     if (!stream) return;
@@ -810,13 +837,24 @@ export const VideoRecorder = ({
                 )}
               </>
             ) : (
-              <video
-                ref={videoRef}
-                autoPlay
-                muted
-                playsInline
-                className="w-full h-full object-cover"
-              />
+              <>
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className={`w-full h-full object-cover ${virtualBackgroundEnabled ? 'hidden' : ''}`}
+                />
+                <canvas
+                  ref={canvasRef}
+                  className={`w-full h-full object-cover ${virtualBackgroundEnabled ? '' : 'hidden'}`}
+                />
+                {virtualBackground.isLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                )}
+              </>
             )}
             
             {isRecording && (
@@ -916,9 +954,9 @@ export const VideoRecorder = ({
             </div>
           )}
           
-          {/* Camera/Mic Controls */}
+          {/* Camera/Mic/Background Controls */}
           {!recordedUrl && (
-            <div className="flex items-center justify-center gap-4">
+            <div className="flex items-center justify-center gap-4 flex-wrap">
               <Button
                 variant={cameraEnabled ? "outline" : "secondary"}
                 size="icon"
@@ -935,6 +973,11 @@ export const VideoRecorder = ({
               >
                 {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
               </Button>
+              <VirtualBackgroundSelector
+                selectedId={selectedBackgroundId}
+                onSelect={setSelectedBackgroundId}
+                disabled={isPreviewing}
+              />
             </div>
           )}
           
