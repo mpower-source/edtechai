@@ -10,7 +10,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.generate-video-content]
-verify_jwt = true
+verify_jwt = false
 
 [functions.generate-quiz]
 verify_jwt = true
