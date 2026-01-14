@@ -26,6 +26,7 @@ const Lessons = () => {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [editingLesson, setEditingLesson] = useState<Partial<Lesson> | null>(null);
   const [recordingLesson, setRecordingLesson] = useState<Lesson | null>(null);
+  const [generatingScript, setGeneratingScript] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCourseAndLessons();
@@ -160,6 +161,84 @@ const Lessons = () => {
       description: "The lesson has been removed",
     });
 
+    fetchCourseAndLessons();
+  };
+
+  const handleRecordClick = async (lesson: Lesson) => {
+    // If no video script exists, generate one first
+    if (!lesson.video_content) {
+      setGeneratingScript(lesson.id);
+      try {
+        const { data, error } = await supabase.functions.invoke('generate-video-content', {
+          body: {
+            lessonTitle: lesson.title,
+            lessonDescription: lesson.description,
+            courseContext: course?.title,
+          },
+        });
+
+        if (error) throw error;
+
+        // Update the lesson with the generated script
+        const { error: updateError } = await supabase
+          .from("lessons")
+          .update({ video_content: data.content })
+          .eq("id", lesson.id);
+
+        if (updateError) throw updateError;
+
+        // Fetch updated lesson data and open recorder
+        const { data: updatedLesson } = await supabase
+          .from("lessons")
+          .select("*")
+          .eq("id", lesson.id)
+          .single();
+
+        setRecordingLesson(updatedLesson || lesson);
+        fetchCourseAndLessons();
+        
+        toast({
+          title: "Script generated",
+          description: "AI has generated a video script for your lesson",
+        });
+      } catch (error: any) {
+        toast({
+          title: "Error generating script",
+          description: error.message,
+          variant: "destructive",
+        });
+      } finally {
+        setGeneratingScript(null);
+      }
+    } else {
+      setRecordingLesson(lesson);
+    }
+  };
+
+  const handleSaveScript = async (lessonId: string, script: string) => {
+    const { error } = await supabase
+      .from("lessons")
+      .update({ video_content: script })
+      .eq("id", lessonId);
+
+    if (error) {
+      toast({
+        title: "Error saving script",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Script saved",
+      description: "Your video script has been saved",
+    });
+
+    // Update the recording lesson state with new script
+    if (recordingLesson?.id === lessonId) {
+      setRecordingLesson({ ...recordingLesson, video_content: script });
+    }
     fetchCourseAndLessons();
   };
 
@@ -300,6 +379,7 @@ const Lessons = () => {
                     fetchCourseAndLessons();
                   }}
                   onClose={() => setRecordingLesson(null)}
+                  onSaveScript={(script) => handleSaveScript(recordingLesson.id, script)}
                 />
               </CardContent>
             </Card>
@@ -511,11 +591,12 @@ const Lessons = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setRecordingLesson(lesson)}
+                          onClick={() => handleRecordClick(lesson)}
+                          disabled={generatingScript === lesson.id}
                           title="Record video"
                         >
                           <Camera className="h-4 w-4 mr-1" />
-                          Record
+                          {generatingScript === lesson.id ? "Generating Script..." : "Record"}
                         </Button>
                         <Button
                           variant="outline"
