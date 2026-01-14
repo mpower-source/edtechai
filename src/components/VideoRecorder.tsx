@@ -85,7 +85,7 @@ export const VideoRecorder = ({
   
   // Teleprompter state
   const [isAutoScrolling, setIsAutoScrolling] = useState(false);
-  const [scrollSpeed, setScrollSpeed] = useState(30); // pixels per second
+  const [scrollSpeed, setScrollSpeed] = useState(15); // pixels per second
   const scriptContainerRef = useRef<HTMLDivElement>(null);
   const scrollAnimationRef = useRef<number | null>(null);
   const lastScrollTimeRef = useRef<number>(0);
