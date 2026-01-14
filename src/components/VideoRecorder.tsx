@@ -85,7 +85,7 @@ export const VideoRecorder = ({
   
   // Teleprompter state
   const [isAutoScrolling, setIsAutoScrolling] = useState(false);
-  const [scrollSpeed, setScrollSpeed] = useState(30); // pixels per second
+  const [scrollSpeed, setScrollSpeed] = useState(10); // pixels per second
   const scriptContainerRef = useRef<HTMLDivElement>(null);
   const scrollAnimationRef = useRef<number | null>(null);
   const lastScrollTimeRef = useRef<number>(0);
@@ -349,7 +349,7 @@ export const VideoRecorder = ({
   }, [isAutoScrolling, startAutoScroll, stopAutoScroll]);
 
   const adjustScrollSpeed = useCallback((delta: number) => {
-    setScrollSpeed((prev) => Math.max(10, Math.min(100, prev + delta)));
+    setScrollSpeed((prev) => Math.max(5, Math.min(40, prev + delta)));
   }, []);
 
   const resetScriptScroll = useCallback(() => {
@@ -1113,8 +1113,8 @@ export const VideoRecorder = ({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7"
-                    onClick={() => adjustScrollSpeed(-10)}
-                    disabled={scrollSpeed <= 10}
+                    onClick={() => adjustScrollSpeed(-5)}
+                    disabled={scrollSpeed <= 5}
                     title="Slower"
                   >
                     <ChevronDown className="h-4 w-4" />
@@ -1126,8 +1126,8 @@ export const VideoRecorder = ({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7"
-                    onClick={() => adjustScrollSpeed(10)}
-                    disabled={scrollSpeed >= 100}
+                    onClick={() => adjustScrollSpeed(5)}
+                    disabled={scrollSpeed >= 40}
                     title="Faster"
                   >
                     <ChevronUp className="h-4 w-4" />
