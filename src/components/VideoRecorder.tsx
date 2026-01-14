@@ -128,7 +128,7 @@ export const VideoRecorder = ({
     setPeakLevel(0);
   }, []);
 
-  const startAudioAnalyzer = useCallback((mediaStream: MediaStream) => {
+  const startAudioAnalyzer = useCallback(async (mediaStream: MediaStream) => {
     try {
       // Stop any existing analyzer first
       if (audioContextRef.current) {
@@ -138,7 +138,15 @@ export const VideoRecorder = ({
         cancelAnimationFrame(audioAnimationRef.current);
       }
       
-      const audioContext = new AudioContext();
+      // Use webkitAudioContext for Safari compatibility
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const audioContext = new AudioContextClass();
+      
+      // Resume the audio context (required by browser autoplay policies)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.3;
@@ -154,7 +162,12 @@ export const VideoRecorder = ({
       let peak = 0;
       
       const updateLevel = () => {
-        if (!analyserRef.current) return;
+        if (!analyserRef.current || !audioContextRef.current) return;
+        
+        // Check if context is still running
+        if (audioContextRef.current.state !== 'running') {
+          audioContextRef.current.resume().catch(() => {});
+        }
         
         // Use time domain data instead of frequency data for more accurate voice levels
         analyserRef.current.getByteTimeDomainData(dataArray);
@@ -166,7 +179,7 @@ export const VideoRecorder = ({
           sumSquares += normalized * normalized;
         }
         const rms = Math.sqrt(sumSquares / dataArray.length);
-        const normalizedLevel = Math.min(100, rms * 200); // Scale up for visibility
+        const normalizedLevel = Math.min(100, rms * 250); // Scale up for visibility
         
         // Track peak with decay
         if (normalizedLevel > peak) {
@@ -359,7 +372,25 @@ export const VideoRecorder = ({
   }, []);
 
   const startAutoScroll = useCallback(() => {
-    if (!scriptContainerRef.current) return;
+    const container = scriptContainerRef.current;
+    if (!container) {
+      console.log("Auto-scroll: No container ref");
+      return;
+    }
+    
+    // Check if content is scrollable (has overflow)
+    const hasOverflow = container.scrollHeight > container.clientHeight + 5;
+    if (!hasOverflow) {
+      console.log("Auto-scroll: Content does not overflow, nothing to scroll");
+      return;
+    }
+    
+    // Check if already at the bottom
+    const isAtBottom = container.scrollTop >= container.scrollHeight - container.clientHeight - 5;
+    if (isAtBottom) {
+      console.log("Auto-scroll: Already at bottom, resetting to top");
+      container.scrollTop = 0;
+    }
     
     setIsAutoScrolling(true);
     lastScrollTimeRef.current = performance.now();
@@ -373,13 +404,14 @@ export const VideoRecorder = ({
       const deltaTime = (currentTime - lastScrollTimeRef.current) / 1000;
       lastScrollTimeRef.current = currentTime;
       
-      const container = scriptContainerRef.current;
+      const cont = scriptContainerRef.current;
       const scrollAmount = scrollSpeed * deltaTime;
       
-      container.scrollTop += scrollAmount;
+      cont.scrollTop += scrollAmount;
       
-      // Check if we've reached the bottom
-      if (container.scrollTop >= container.scrollHeight - container.clientHeight) {
+      // Check if we've reached the bottom (with small epsilon for sub-pixel rounding)
+      const distanceToBottom = cont.scrollHeight - cont.clientHeight - cont.scrollTop;
+      if (distanceToBottom <= 1) {
         stopAutoScroll();
         return;
       }
