@@ -32,6 +32,7 @@ interface VideoRecorderProps {
   script?: string;
   lessonId?: string;
   lessonTitle?: string;
+  existingVideoUrl?: string | null;
   onVideoUploaded?: (videoUrl: string) => void;
   onClose?: () => void;
 }
@@ -40,6 +41,7 @@ export const VideoRecorder = ({
   script, 
   lessonId, 
   lessonTitle,
+  existingVideoUrl,
   onVideoUploaded,
   onClose 
 }: VideoRecorderProps) => {
@@ -89,6 +91,12 @@ export const VideoRecorder = ({
   const scriptContainerRef = useRef<HTMLDivElement>(null);
   const scrollAnimationRef = useRef<number | null>(null);
   const lastScrollTimeRef = useRef<number>(0);
+
+  // Track recording sessions and lesson "draft recording" status
+  const wasRecordingRef = useRef(false);
+  const previousLessonVideoUrlRef = useRef<string | null>(null);
+  const markedNewRecordingRef = useRef(false);
+  const hasUploadedRef = useRef(false);
 
   const getExtForMimeType = (mimeType: string): "webm" | "mp4" =>
     mimeType.includes("mp4") ? "mp4" : "webm";
@@ -206,8 +214,39 @@ export const VideoRecorder = ({
     setIsPreviewing(false);
   }, [stream, stopAudioAnalyzer]);
 
+  const markLessonVideoAsPending = useCallback(async () => {
+    if (!lessonId) return;
+    if (markedNewRecordingRef.current) return;
+
+    // Only mark after we successfully update the backend
+    const { error } = await supabase
+      .from("lessons")
+      .update({ video_url: null })
+      .eq("id", lessonId);
+
+    if (error) {
+      console.warn("Failed to mark lesson as new recording:", error.message);
+      return;
+    }
+
+    markedNewRecordingRef.current = true;
+  }, [lessonId]);
+
+  useEffect(() => {
+    previousLessonVideoUrlRef.current = existingVideoUrl ?? null;
+  }, [existingVideoUrl]);
+
+  useEffect(() => {
+    // New lesson / new recorder mount should reset session flags
+    markedNewRecordingRef.current = false;
+    hasUploadedRef.current = false;
+  }, [lessonId]);
+
   const startRecording = useCallback(() => {
     if (!stream) return;
+
+    // Mark the lesson as having a "new recording" in progress until upload completes.
+    void markLessonVideoAsPending();
 
     try {
       chunksRef.current = [];
@@ -265,7 +304,7 @@ export const VideoRecorder = ({
         variant: "destructive",
       });
     }
-  }, [stream, stopCamera, toast]);
+  }, [stream, stopCamera, toast, markLessonVideoAsPending]);
 
   const stopRecording = useCallback(() => {
     const mr = mediaRecorderRef.current;
@@ -699,6 +738,9 @@ export const VideoRecorder = ({
         .eq('id', lessonId);
       
       if (updateError) throw updateError;
+
+      // Prevent cleanup from restoring the previous URL once upload succeeded
+      hasUploadedRef.current = true;
       
       toast({
         title: "Video uploaded",
@@ -717,17 +759,28 @@ export const VideoRecorder = ({
     }
   }, [recordedBlob, lessonId, toast, onVideoUploaded, isTrimMode, createTrimmedVideo, recordedFileExt, recordedMimeType]);
 
-  // Stop auto-scroll when recording stops
+  // Stop auto-scroll only when a recording session ends (not while idle/previewing)
   useEffect(() => {
-    if (!isRecording && isAutoScrolling) {
+    if (wasRecordingRef.current && !isRecording) {
       stopAutoScroll();
     }
-  }, [isRecording, isAutoScrolling, stopAutoScroll]);
+    wasRecordingRef.current = isRecording;
+  }, [isRecording, stopAutoScroll]);
 
   useEffect(() => {
     return () => {
       stopAudioAnalyzer();
       stopAutoScroll();
+
+      // If the user started a replacement recording but never uploaded it,
+      // restore the previous lesson video URL so the lesson doesn't look "empty".
+      if (lessonId && markedNewRecordingRef.current && !hasUploadedRef.current) {
+        const previousUrl = previousLessonVideoUrlRef.current;
+        if (previousUrl) {
+          supabase.from("lessons").update({ video_url: previousUrl }).eq("id", lessonId);
+        }
+      }
+
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -738,7 +791,7 @@ export const VideoRecorder = ({
         URL.revokeObjectURL(recordedUrl);
       }
     };
-  }, [stream, recordedUrl, stopAudioAnalyzer]);
+  }, [stream, recordedUrl, stopAudioAnalyzer, stopAutoScroll, lessonId]);
 
   return (
     <div className="grid lg:grid-cols-2 gap-6">

@@ -294,6 +294,7 @@ const Lessons = () => {
                   script={recordingLesson.video_content || undefined}
                   lessonId={recordingLesson.id}
                   lessonTitle={recordingLesson.title}
+                  existingVideoUrl={recordingLesson.video_url}
                   onVideoUploaded={() => {
                     setRecordingLesson(null);
                     fetchCourseAndLessons();
