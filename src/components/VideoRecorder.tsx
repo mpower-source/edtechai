@@ -91,6 +91,8 @@ export const VideoRecorder = ({
   const scriptContainerRef = useRef<HTMLDivElement>(null);
   const scrollAnimationRef = useRef<number | null>(null);
   const lastScrollTimeRef = useRef<number>(0);
+  // Accumulate fractional scroll for low speeds (some browsers effectively quantize scrollTop)
+  const scrollPositionRef = useRef<number>(0);
 
   // Track recording sessions and lesson "draft recording" status
   const wasRecordingRef = useRef(false);
@@ -329,6 +331,12 @@ export const VideoRecorder = ({
       cancelAnimationFrame(scrollAnimationRef.current);
       scrollAnimationRef.current = null;
     }
+
+    const container = scriptContainerRef.current;
+    if (container) {
+      scrollPositionRef.current = container.scrollTop;
+    }
+
     setIsAutoScrolling(false);
   }, []);
 
@@ -348,42 +356,66 @@ export const VideoRecorder = ({
     stopAutoScroll();
     // Reset scroll position after a brief delay to ensure DOM is ready
     setTimeout(() => {
-      if (scriptContainerRef.current) {
-        scriptContainerRef.current.scrollTop = 0;
+      const container = scriptContainerRef.current;
+      scrollPositionRef.current = 0;
+      if (container) {
+        container.scrollTop = 0;
       }
     }, 0);
   }, [recordedUrl, stopAutoScroll]);
 
 
   const startAutoScroll = useCallback(() => {
-    if (!scriptContainerRef.current) return;
-    
+    const container = scriptContainerRef.current;
+    if (!container) return;
+
+    // Ensure we never run multiple RAF loops
+    if (scrollAnimationRef.current) {
+      cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = null;
+    }
+
+    const maxScrollTop = container.scrollHeight - container.clientHeight;
+    if (maxScrollTop <= 0) {
+      // Nothing to scroll
+      setIsAutoScrolling(false);
+      return;
+    }
+
     setIsAutoScrolling(true);
     lastScrollTimeRef.current = performance.now();
-    
+    scrollPositionRef.current = container.scrollTop;
+
     const animate = (currentTime: number) => {
-      if (!scriptContainerRef.current) {
+      const el = scriptContainerRef.current;
+      if (!el) {
         stopAutoScroll();
         return;
       }
-      
+
       const deltaTime = (currentTime - lastScrollTimeRef.current) / 1000;
       lastScrollTimeRef.current = currentTime;
-      
-      const container = scriptContainerRef.current;
-      const scrollAmount = scrollSpeed * deltaTime;
-      
-      container.scrollTop += scrollAmount;
-      
-      // Check if we've reached the bottom
-      if (container.scrollTop >= container.scrollHeight - container.clientHeight) {
+
+      // Accumulate into our own float ref so low speeds still move smoothly
+      scrollPositionRef.current += scrollSpeed * deltaTime;
+
+      const elMaxScrollTop = el.scrollHeight - el.clientHeight;
+      if (elMaxScrollTop <= 0) {
         stopAutoScroll();
         return;
       }
-      
+
+      if (scrollPositionRef.current >= elMaxScrollTop) {
+        scrollPositionRef.current = elMaxScrollTop;
+        el.scrollTop = elMaxScrollTop;
+        stopAutoScroll();
+        return;
+      }
+
+      el.scrollTop = scrollPositionRef.current;
       scrollAnimationRef.current = requestAnimationFrame(animate);
     };
-    
+
     scrollAnimationRef.current = requestAnimationFrame(animate);
   }, [scrollSpeed, stopAutoScroll]);
 
