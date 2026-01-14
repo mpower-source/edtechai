@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageSquare, Send, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 export const StudentChatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -24,6 +25,18 @@ export const StudentChatbot = () => {
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
+    // Get the user's session token for proper authentication
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.access_token) {
+      toast({
+        title: "Authentication required",
+        description: "Please log in to use the chatbot",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const userMessage = { role: "user", content: input };
     setMessages(prev => [...prev, userMessage]);
     setInput("");
@@ -36,7 +49,7 @@ export const StudentChatbot = () => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
             message: input,
