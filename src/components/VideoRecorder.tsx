@@ -110,40 +110,6 @@ export const VideoRecorder = ({
 
     return "";
   };
-  const startCamera = useCallback(async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: cameraEnabled,
-        audio: micEnabled,
-      });
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-      setIsPreviewing(true);
-    } catch (error) {
-      toast({
-        title: "Camera access denied",
-        description: "Please allow camera and microphone access to record video.",
-        variant: "destructive",
-      });
-    }
-  }, [cameraEnabled, micEnabled, toast]);
-
-  const stopAudioAnalyzer = useCallback(() => {
-    if (audioAnimationRef.current) {
-      cancelAnimationFrame(audioAnimationRef.current);
-      audioAnimationRef.current = null;
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
-    analyserRef.current = null;
-    setAudioLevel(0);
-    setPeakLevel(0);
-  }, []);
-
   const startAudioAnalyzer = useCallback((mediaStream: MediaStream) => {
     try {
       const audioContext = new AudioContext();
@@ -190,6 +156,45 @@ export const VideoRecorder = ({
     } catch (error) {
       console.error("Audio analyzer error:", error);
     }
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: cameraEnabled,
+        audio: micEnabled,
+      });
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+      setIsPreviewing(true);
+      
+      // Start audio analyzer for level meter when camera starts
+      if (micEnabled) {
+        startAudioAnalyzer(mediaStream);
+      }
+    } catch (error) {
+      toast({
+        title: "Camera access denied",
+        description: "Please allow camera and microphone access to record video.",
+        variant: "destructive",
+      });
+    }
+  }, [cameraEnabled, micEnabled, toast, startAudioAnalyzer]);
+
+  const stopAudioAnalyzer = useCallback(() => {
+    if (audioAnimationRef.current) {
+      cancelAnimationFrame(audioAnimationRef.current);
+      audioAnimationRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setAudioLevel(0);
+    setPeakLevel(0);
   }, []);
 
   const stopCamera = useCallback(() => {
@@ -248,11 +253,6 @@ export const VideoRecorder = ({
       setIsRecording(true);
       setRecordingTime(0);
 
-      // Start audio analyzer for level meter
-      if (micEnabled) {
-        startAudioAnalyzer(stream);
-      }
-
       timerRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
@@ -265,7 +265,7 @@ export const VideoRecorder = ({
         variant: "destructive",
       });
     }
-  }, [stream, stopCamera, toast, micEnabled, startAudioAnalyzer]);
+  }, [stream, stopCamera, toast]);
 
   const stopRecording = useCallback(() => {
     const mr = mediaRecorderRef.current;
