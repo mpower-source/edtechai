@@ -34,6 +34,7 @@ export const VideoRecorder = ({
 }: VideoRecorderProps) => {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playbackVideoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   
@@ -240,9 +241,18 @@ export const VideoRecorder = ({
           <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
             {recordedUrl ? (
               <video
+                ref={playbackVideoRef}
                 src={recordedUrl}
                 controls
+                autoPlay={false}
+                playsInline
                 className="w-full h-full object-cover"
+                onLoadedData={() => {
+                  // Ensure video is ready for playback
+                  if (playbackVideoRef.current) {
+                    playbackVideoRef.current.currentTime = 0;
+                  }
+                }}
               />
             ) : (
               <video
