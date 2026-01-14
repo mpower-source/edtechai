@@ -54,9 +54,7 @@ export const VideoRecorder = ({
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioAnimationRef = useRef<number | null>(null);
-  const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const audioMeterGainRef = useRef<GainNode | null>(null);
-
+  
   const [isRecording, setIsRecording] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
@@ -69,29 +67,25 @@ export const VideoRecorder = ({
   const [micEnabled, setMicEnabled] = useState(true);
   const [recordingTime, setRecordingTime] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Countdown state
-  const [countdown, setCountdown] = useState<number | null>(null);
-  const countdownRef = useRef<NodeJS.Timeout | null>(null);
-
+  
   // Audio level state
   const [audioLevel, setAudioLevel] = useState(0);
   const [peakLevel, setPeakLevel] = useState(0);
-
+  
   // Trim state
   const [isTrimMode, setIsTrimMode] = useState(false);
   const [videoDuration, setVideoDuration] = useState(0);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [isTrimming, setIsTrimming] = useState(false);
-
+  
   // Playback error state
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [isFixingPlayback, setIsFixingPlayback] = useState(false);
-
+  
   // Teleprompter state
   const [isAutoScrolling, setIsAutoScrolling] = useState(false);
-  const [scrollSpeed, setScrollSpeed] = useState(10); // pixels per second
+  const [scrollSpeed, setScrollSpeed] = useState(30); // pixels per second
   const scriptContainerRef = useRef<HTMLDivElement>(null);
   const scrollAnimationRef = useRef<number | null>(null);
   const lastScrollTimeRef = useRef<number>(0);
@@ -116,137 +110,8 @@ export const VideoRecorder = ({
 
     return "";
   };
-
-  const stopAudioAnalyzer = useCallback(() => {
-    if (audioAnimationRef.current) {
-      cancelAnimationFrame(audioAnimationRef.current);
-      audioAnimationRef.current = null;
-    }
-
-    try {
-      analyserRef.current?.disconnect();
-    } catch {
-      // ignore
-    }
-    try {
-      audioSourceRef.current?.disconnect();
-    } catch {
-      // ignore
-    }
-    try {
-      audioMeterGainRef.current?.disconnect();
-    } catch {
-      // ignore
-    }
-
-    analyserRef.current = null;
-    audioSourceRef.current = null;
-    audioMeterGainRef.current = null;
-
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
-
-    setAudioLevel(0);
-    setPeakLevel(0);
-  }, []);
-
-  const startAudioAnalyzer = useCallback((mediaStream: MediaStream, audioContext: AudioContext) => {
-    try {
-      const audioTracks = mediaStream.getAudioTracks();
-      if (!audioTracks.length) {
-        console.warn("Audio analyzer: no audio tracks on stream");
-        return;
-      }
-
-      // Keep references so Safari/Chromium don't GC the graph.
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.2;
-
-      const source = audioContext.createMediaStreamSource(mediaStream);
-      source.connect(analyser);
-
-      // Keep the audio graph 'alive' (some browsers can output flat lines otherwise)
-      const silentGain = audioContext.createGain();
-      silentGain.gain.value = 0;
-      analyser.connect(silentGain);
-      silentGain.connect(audioContext.destination);
-
-      analyserRef.current = analyser;
-      audioSourceRef.current = source;
-      audioMeterGainRef.current = silentGain;
-
-      // Prefer float time-domain data when available.
-      const floatData = new Float32Array(analyser.fftSize);
-      const byteData = new Uint8Array(analyser.fftSize);
-      let peak = 0;
-
-      // Best-effort: ensure context is running (may already be running from startCamera)
-      if (audioContext.state !== "running") {
-        audioContext.resume().catch(() => {});
-      }
-
-      const updateLevel = () => {
-        if (!analyserRef.current || !audioContextRef.current) return;
-
-        let rms = 0;
-
-        try {
-          analyserRef.current.getFloatTimeDomainData(floatData);
-          let sumSquares = 0;
-          for (let i = 0; i < floatData.length; i++) {
-            const v = floatData[i];
-            sumSquares += v * v;
-          }
-          rms = Math.sqrt(sumSquares / floatData.length);
-        } catch {
-          // Fallback for older browsers
-          analyserRef.current.getByteTimeDomainData(byteData);
-          let sumSquares = 0;
-          for (let i = 0; i < byteData.length; i++) {
-            const normalized = (byteData[i] - 128) / 128;
-            sumSquares += normalized * normalized;
-          }
-          rms = Math.sqrt(sumSquares / byteData.length);
-        }
-
-        // Scale RMS to 0-100 UI range
-        const normalizedLevel = Math.min(100, rms * 2000);
-
-        if (normalizedLevel > peak) {
-          peak = normalizedLevel;
-        } else {
-          peak = Math.max(0, peak - 0.6);
-        }
-
-        setAudioLevel(normalizedLevel);
-        setPeakLevel(peak);
-
-        audioAnimationRef.current = requestAnimationFrame(updateLevel);
-      };
-
-      updateLevel();
-    } catch (error) {
-      console.error("Audio analyzer error:", error);
-    }
-  }, []);
-
   const startCamera = useCallback(async () => {
     try {
-      // Create and resume AudioContext IMMEDIATELY on user click (before getUserMedia)
-      // This ensures the context is in 'running' state due to user gesture
-      let audioContext: AudioContext | null = null;
-      if (micEnabled) {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        audioContext = new AudioContextClass();
-        // Force resume immediately while still in user gesture context
-        await audioContext.resume();
-        audioContextRef.current = audioContext;
-        console.log("AudioContext created and resumed, state:", audioContext.state);
-      }
-      
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: cameraEnabled,
         audio: micEnabled,
@@ -256,20 +121,76 @@ export const VideoRecorder = ({
         videoRef.current.srcObject = mediaStream;
       }
       setIsPreviewing(true);
-      
-      // Start audio analyzer with the pre-created context
-      if (micEnabled && audioContext) {
-        startAudioAnalyzer(mediaStream, audioContext);
-      }
     } catch (error) {
-      console.error("Camera/mic error:", error);
       toast({
         title: "Camera access denied",
         description: "Please allow camera and microphone access to record video.",
         variant: "destructive",
       });
     }
-  }, [cameraEnabled, micEnabled, toast, startAudioAnalyzer]);
+  }, [cameraEnabled, micEnabled, toast]);
+
+  const stopAudioAnalyzer = useCallback(() => {
+    if (audioAnimationRef.current) {
+      cancelAnimationFrame(audioAnimationRef.current);
+      audioAnimationRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setAudioLevel(0);
+    setPeakLevel(0);
+  }, []);
+
+  const startAudioAnalyzer = useCallback((mediaStream: MediaStream) => {
+    try {
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.5;
+      
+      const source = audioContext.createMediaStreamSource(mediaStream);
+      source.connect(analyser);
+      
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+      
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let peak = 0;
+      
+      const updateLevel = () => {
+        if (!analyserRef.current) return;
+        
+        analyserRef.current.getByteFrequencyData(dataArray);
+        
+        // Calculate average level
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / dataArray.length;
+        const normalizedLevel = Math.min(100, (average / 128) * 100);
+        
+        // Track peak with decay
+        if (normalizedLevel > peak) {
+          peak = normalizedLevel;
+        } else {
+          peak = Math.max(0, peak - 0.5);
+        }
+        
+        setAudioLevel(normalizedLevel);
+        setPeakLevel(peak);
+        
+        audioAnimationRef.current = requestAnimationFrame(updateLevel);
+      };
+      
+      updateLevel();
+    } catch (error) {
+      console.error("Audio analyzer error:", error);
+    }
+  }, []);
 
   const stopCamera = useCallback(() => {
     stopAudioAnalyzer();
@@ -279,39 +200,6 @@ export const VideoRecorder = ({
     }
     setIsPreviewing(false);
   }, [stream, stopAudioAnalyzer]);
-
-  const initiateRecording = useCallback(() => {
-    if (!stream) return;
-    
-    // Start countdown
-    setCountdown(3);
-    
-    countdownRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev === null || prev <= 1) {
-          if (countdownRef.current) {
-            clearInterval(countdownRef.current);
-            countdownRef.current = null;
-          }
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    
-    // Start actual recording after 3 seconds
-    setTimeout(() => {
-      startRecording();
-    }, 3000);
-  }, [stream]);
-
-  const cancelCountdown = useCallback(() => {
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current);
-      countdownRef.current = null;
-    }
-    setCountdown(null);
-  }, []);
 
   const startRecording = useCallback(() => {
     if (!stream) return;
@@ -360,7 +248,10 @@ export const VideoRecorder = ({
       setIsRecording(true);
       setRecordingTime(0);
 
-      // Audio analyzer already started in startCamera
+      // Start audio analyzer for level meter
+      if (micEnabled) {
+        startAudioAnalyzer(stream);
+      }
 
       timerRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
@@ -418,47 +309,35 @@ export const VideoRecorder = ({
   }, []);
 
   const startAutoScroll = useCallback(() => {
-    const container = scriptContainerRef.current;
-    if (!container) {
-      console.log("Auto-scroll: No container ref");
-      return;
-    }
+    if (!scriptContainerRef.current) return;
     
-    // Reset to top first to ensure we have room to scroll
-    container.scrollTop = 0;
+    setIsAutoScrolling(true);
+    lastScrollTimeRef.current = performance.now();
     
-    // Small delay to let the scroll reset take effect
-    setTimeout(() => {
-      if (!scriptContainerRef.current) return;
+    const animate = (currentTime: number) => {
+      if (!scriptContainerRef.current) {
+        stopAutoScroll();
+        return;
+      }
       
-      setIsAutoScrolling(true);
-      lastScrollTimeRef.current = performance.now();
+      const deltaTime = (currentTime - lastScrollTimeRef.current) / 1000;
+      lastScrollTimeRef.current = currentTime;
       
-      const animate = (currentTime: number) => {
-        const cont = scriptContainerRef.current;
-        if (!cont) {
-          stopAutoScroll();
-          return;
-        }
-        
-        const deltaTime = (currentTime - lastScrollTimeRef.current) / 1000;
-        lastScrollTimeRef.current = currentTime;
-        
-        const scrollAmount = scrollSpeed * deltaTime;
-        cont.scrollTop += scrollAmount;
-        
-        // Check if we've reached the bottom (with generous epsilon)
-        const maxScroll = cont.scrollHeight - cont.clientHeight;
-        if (maxScroll > 0 && cont.scrollTop >= maxScroll - 2) {
-          stopAutoScroll();
-          return;
-        }
-        
-        scrollAnimationRef.current = requestAnimationFrame(animate);
-      };
+      const container = scriptContainerRef.current;
+      const scrollAmount = scrollSpeed * deltaTime;
+      
+      container.scrollTop += scrollAmount;
+      
+      // Check if we've reached the bottom
+      if (container.scrollTop >= container.scrollHeight - container.clientHeight) {
+        stopAutoScroll();
+        return;
+      }
       
       scrollAnimationRef.current = requestAnimationFrame(animate);
-    }, 50);
+    };
+    
+    scrollAnimationRef.current = requestAnimationFrame(animate);
   }, [scrollSpeed, stopAutoScroll]);
 
   const toggleAutoScroll = useCallback(() => {
@@ -470,7 +349,7 @@ export const VideoRecorder = ({
   }, [isAutoScrolling, startAutoScroll, stopAutoScroll]);
 
   const adjustScrollSpeed = useCallback((delta: number) => {
-    setScrollSpeed((prev) => Math.max(5, Math.min(40, prev + delta)));
+    setScrollSpeed((prev) => Math.max(10, Math.min(100, prev + delta)));
   }, []);
 
   const resetScriptScroll = useCallback(() => {
@@ -830,14 +709,12 @@ export const VideoRecorder = ({
     }
   }, [recordedBlob, lessonId, toast, onVideoUploaded, isTrimMode, createTrimmedVideo, recordedFileExt, recordedMimeType]);
 
-  // Stop auto-scroll when recording stops (only on transition from recording -> not recording)
-  const wasRecordingRef = useRef(false);
+  // Stop auto-scroll when recording stops
   useEffect(() => {
-    if (wasRecordingRef.current && !isRecording) {
+    if (!isRecording && isAutoScrolling) {
       stopAutoScroll();
     }
-    wasRecordingRef.current = isRecording;
-  }, [isRecording, stopAutoScroll]);
+  }, [isRecording, isAutoScrolling, stopAutoScroll]);
 
   useEffect(() => {
     return () => {
@@ -943,10 +820,60 @@ export const VideoRecorder = ({
             )}
             
             {isRecording && (
-              <div className="absolute top-4 left-4 flex items-center gap-2 bg-destructive text-destructive-foreground px-3 py-1 rounded-full text-sm font-medium animate-pulse">
-                <Circle className="h-3 w-3 fill-current" />
-                REC {formatTime(recordingTime)}
-              </div>
+              <>
+                <div className="absolute top-4 left-4 flex items-center gap-2 bg-destructive text-destructive-foreground px-3 py-1 rounded-full text-sm font-medium animate-pulse">
+                  <Circle className="h-3 w-3 fill-current" />
+                  REC {formatTime(recordingTime)}
+                </div>
+                
+                {/* Audio Level Meter */}
+                {micEnabled && (
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <div className="bg-background/80 backdrop-blur-sm rounded-lg p-2">
+                      <div className="flex items-center gap-2">
+                        <Mic className="h-4 w-4 text-foreground" />
+                        <div className="flex-1 relative h-3 bg-muted rounded-full overflow-hidden">
+                          {/* Level bar */}
+                          <div 
+                            className="absolute inset-y-0 left-0 transition-all duration-75 rounded-full"
+                            style={{ 
+                              width: `${audioLevel}%`,
+                              background: audioLevel > 80 
+                                ? 'hsl(var(--destructive))' 
+                                : audioLevel > 50 
+                                  ? 'hsl(45 100% 50%)' 
+                                  : 'hsl(var(--primary))'
+                            }}
+                          />
+                          {/* Peak indicator */}
+                          <div 
+                            className="absolute inset-y-0 w-0.5 bg-foreground transition-all duration-150"
+                            style={{ left: `${Math.min(peakLevel, 100)}%` }}
+                          />
+                          {/* Level markers */}
+                          <div className="absolute inset-0 flex">
+                            {[25, 50, 75].map((mark) => (
+                              <div 
+                                key={mark}
+                                className="absolute h-full w-px bg-foreground/20"
+                                style={{ left: `${mark}%` }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <span className="text-xs font-mono text-foreground w-8 text-right">
+                          {Math.round(audioLevel)}%
+                        </span>
+                      </div>
+                      {audioLevel < 5 && (
+                        <p className="text-xs text-destructive mt-1 text-center">
+                          No audio detected — check your microphone
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             
             {isTrimMode && !playbackError && (
@@ -959,18 +886,6 @@ export const VideoRecorder = ({
             {!isPreviewing && !recordedUrl && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <p className="text-muted-foreground">Click "Start Camera" to begin</p>
-              </div>
-            )}
-            
-            {/* Countdown Overlay */}
-            {countdown !== null && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="text-8xl font-bold text-primary animate-pulse">
-                    {countdown}
-                  </div>
-                  <p className="text-lg text-muted-foreground">Get ready...</p>
-                </div>
               </div>
             )}
           </div>
@@ -1074,128 +989,79 @@ export const VideoRecorder = ({
           )}
           
           {/* Recording Controls */}
-          <div className="flex items-center gap-3 justify-center">
-            <div className="flex flex-wrap gap-2 justify-center">
-              {!isPreviewing && !recordedUrl && (
-                <Button onClick={startCamera}>
-                  <Camera className="h-4 w-4 mr-2" />
-                  Start Camera
-                </Button>
-              )}
-              
-              {isPreviewing && !isRecording && countdown === null && (
-                <>
-                  <Button onClick={initiateRecording} variant="destructive">
-                    <Circle className="h-4 w-4 mr-2 fill-current" />
-                    Start Recording
-                  </Button>
-                  <Button onClick={stopCamera} variant="outline">
-                    <X className="h-4 w-4 mr-2" />
-                    Cancel
-                  </Button>
-                </>
-              )}
-              
-              {countdown !== null && (
-                <Button onClick={cancelCountdown} variant="outline">
-                  <X className="h-4 w-4 mr-2" />
-                  Cancel Countdown
-                </Button>
-              )}
-              
-              {isRecording && (
-                <Button onClick={stopRecording} variant="destructive">
-                  <Square className="h-4 w-4 mr-2 fill-current" />
-                  Stop Recording
-                </Button>
-              )}
-            </div>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {!isPreviewing && !recordedUrl && (
+              <Button onClick={startCamera}>
+                <Camera className="h-4 w-4 mr-2" />
+                Start Camera
+              </Button>
+            )}
             
-            {/* Vertical Audio Level Meter - shown when previewing or recording */}
-            {isPreviewing && micEnabled && (
-              <div className="flex flex-col items-center gap-1">
-                <div className="relative w-3 h-20 bg-muted rounded-full overflow-hidden rotate-180">
-                  {/* Level bar */}
-                  <div 
-                    className="absolute bottom-0 left-0 right-0 transition-all duration-75 rounded-full"
-                    style={{ 
-                      height: `${audioLevel}%`,
-                      background: audioLevel > 80 
-                        ? 'hsl(var(--destructive))' 
-                        : audioLevel > 50 
-                          ? 'hsl(45 100% 50%)' 
-                          : 'hsl(var(--primary))'
-                    }}
-                  />
-                  {/* Peak indicator */}
-                  <div 
-                    className="absolute left-0 right-0 h-0.5 bg-foreground transition-all duration-150"
-                    style={{ bottom: `${Math.min(peakLevel, 100)}%` }}
-                  />
-                  {/* Level markers */}
-                  {[25, 50, 75].map((mark) => (
-                    <div 
-                      key={mark}
-                      className="absolute left-0 right-0 h-px bg-foreground/20"
-                      style={{ bottom: `${mark}%` }}
-                    />
-                  ))}
-                </div>
-                <Mic className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs font-mono text-muted-foreground">
-                  {Math.round(audioLevel)}%
-                </span>
-                {audioLevel < 5 && (
-                  <span className="text-xs text-destructive">No audio</span>
+            {isPreviewing && !isRecording && (
+              <>
+                <Button onClick={startRecording} variant="destructive">
+                  <Circle className="h-4 w-4 mr-2 fill-current" />
+                  Start Recording
+                </Button>
+                <Button onClick={stopCamera} variant="outline">
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
+              </>
+            )}
+            
+            {isRecording && (
+              <Button onClick={stopRecording} variant="destructive">
+                <Square className="h-4 w-4 mr-2 fill-current" />
+                Stop Recording
+              </Button>
+            )}
+            
+            {recordedUrl && (
+              <>
+                {playbackError && (
+                  <Button 
+                    onClick={fixPlayback} 
+                    variant="default"
+                    disabled={isFixingPlayback}
+                  >
+                    {isFixingPlayback ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Fixing...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Fix Playback
+                      </>
+                    )}
+                  </Button>
                 )}
-              </div>
+                <Button 
+                  onClick={() => setIsTrimMode(!isTrimMode)} 
+                  variant={isTrimMode ? "default" : "outline"}
+                  disabled={isTrimming || !!playbackError}
+                >
+                  <Scissors className="h-4 w-4 mr-2" />
+                  {isTrimMode ? "Done Trimming" : "Trim"}
+                </Button>
+                <Button onClick={handleDownload} variant="outline" disabled={isTrimming || uploading}>
+                  <Download className="h-4 w-4 mr-2" />
+                  {isTrimming ? "Processing..." : "Download"}
+                </Button>
+                {lessonId && (
+                  <Button onClick={handleUpload} disabled={uploading || isTrimming || !!playbackError}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    {uploading ? "Uploading..." : isTrimming ? "Processing..." : "Upload to Lesson"}
+                  </Button>
+                )}
+                <Button onClick={resetRecording} variant="ghost" disabled={isTrimming || uploading || isFixingPlayback}>
+                  Re-record
+                </Button>
+              </>
             )}
           </div>
-          
-          {recordedUrl && (
-            <div className="flex flex-wrap gap-2 justify-center">
-              {playbackError && (
-                <Button 
-                  onClick={fixPlayback} 
-                  variant="default"
-                  disabled={isFixingPlayback}
-                >
-                  {isFixingPlayback ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Fixing...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Fix Playback
-                    </>
-                  )}
-                </Button>
-              )}
-              <Button 
-                onClick={() => setIsTrimMode(!isTrimMode)} 
-                variant={isTrimMode ? "default" : "outline"}
-                disabled={isTrimming || !!playbackError}
-              >
-                <Scissors className="h-4 w-4 mr-2" />
-                {isTrimMode ? "Done Trimming" : "Trim"}
-              </Button>
-              <Button onClick={handleDownload} variant="outline" disabled={isTrimming || uploading}>
-                <Download className="h-4 w-4 mr-2" />
-                {isTrimming ? "Processing..." : "Download"}
-              </Button>
-              {lessonId && (
-                <Button onClick={handleUpload} disabled={uploading || isTrimming || !!playbackError}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  {uploading ? "Uploading..." : isTrimming ? "Processing..." : "Upload to Lesson"}
-                </Button>
-              )}
-              <Button onClick={resetRecording} variant="ghost" disabled={isTrimming || uploading || isFixingPlayback}>
-                Re-record
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
       
@@ -1247,8 +1113,8 @@ export const VideoRecorder = ({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7"
-                    onClick={() => adjustScrollSpeed(-5)}
-                    disabled={scrollSpeed <= 5}
+                    onClick={() => adjustScrollSpeed(-10)}
+                    disabled={scrollSpeed <= 10}
                     title="Slower"
                   >
                     <ChevronDown className="h-4 w-4" />
@@ -1260,8 +1126,8 @@ export const VideoRecorder = ({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7"
-                    onClick={() => adjustScrollSpeed(5)}
-                    disabled={scrollSpeed >= 40}
+                    onClick={() => adjustScrollSpeed(10)}
+                    disabled={scrollSpeed >= 100}
                     title="Faster"
                   >
                     <ChevronUp className="h-4 w-4" />
@@ -1272,7 +1138,8 @@ export const VideoRecorder = ({
               {/* Script Content */}
               <div 
                 ref={scriptContainerRef}
-                className="h-[350px] overflow-y-auto pr-4"
+                className="h-[350px] overflow-y-auto pr-4 scroll-smooth"
+                style={{ scrollBehavior: isAutoScrolling ? 'auto' : 'smooth' }}
               >
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   <pre className="whitespace-pre-wrap font-sans text-lg leading-relaxed text-foreground">
