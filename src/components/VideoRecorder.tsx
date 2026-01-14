@@ -128,54 +128,73 @@ export const VideoRecorder = ({
     setPeakLevel(0);
   }, []);
 
-  const startAudioAnalyzer = useCallback((mediaStream: MediaStream, audioContext: AudioContext) => {
-    try {
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.3;
-      
-      const source = audioContext.createMediaStreamSource(mediaStream);
-      source.connect(analyser);
-      
-      analyserRef.current = analyser;
-      
-      // Use time domain data for better voice detection
-      const dataArray = new Uint8Array(analyser.fftSize);
-      let peak = 0;
-      
-      const updateLevel = () => {
-        if (!analyserRef.current || !audioContextRef.current) return;
-        
-        // Use time domain data instead of frequency data for more accurate voice levels
-        analyserRef.current.getByteTimeDomainData(dataArray);
-        
-        // Calculate RMS (root mean square) for better audio level representation
-        let sumSquares = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          const normalized = (dataArray[i] - 128) / 128;
-          sumSquares += normalized * normalized;
+  const startAudioAnalyzer = useCallback(
+    (mediaStream: MediaStream, audioContext: AudioContext) => {
+      try {
+        const audioTracks = mediaStream.getAudioTracks();
+        if (!audioTracks.length) {
+          console.warn("Audio analyzer: no audio tracks on stream");
+          return;
         }
-        const rms = Math.sqrt(sumSquares / dataArray.length);
-        const normalizedLevel = Math.min(100, rms * 300); // Scale up for visibility
-        
-        // Track peak with decay
-        if (normalizedLevel > peak) {
-          peak = normalizedLevel;
-        } else {
-          peak = Math.max(0, peak - 0.3);
-        }
-        
-        setAudioLevel(normalizedLevel);
-        setPeakLevel(peak);
-        
-        audioAnimationRef.current = requestAnimationFrame(updateLevel);
-      };
-      
-      updateLevel();
-    } catch (error) {
-      console.error("Audio analyzer error:", error);
-    }
-  }, []);
+
+        // Some browsers are more reliable if we analyze an audio-only stream.
+        const audioOnlyStream = new MediaStream(audioTracks);
+
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.3;
+
+        const source = audioContext.createMediaStreamSource(audioOnlyStream);
+        source.connect(analyser);
+
+        // Keep the audio graph 'alive' (Safari can output flat 128s otherwise)
+        const silentGain = audioContext.createGain();
+        silentGain.gain.value = 0;
+        analyser.connect(silentGain);
+        silentGain.connect(audioContext.destination);
+
+        analyserRef.current = analyser;
+
+        const dataArray = new Uint8Array(analyser.fftSize);
+        let peak = 0;
+
+        const updateLevel = () => {
+          if (!analyserRef.current || !audioContextRef.current) return;
+
+          // Ensure context stays running
+          if (audioContextRef.current.state !== "running") {
+            audioContextRef.current.resume().catch(() => {});
+          }
+
+          analyserRef.current.getByteTimeDomainData(dataArray);
+
+          let sumSquares = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            const normalized = (dataArray[i] - 128) / 128;
+            sumSquares += normalized * normalized;
+          }
+          const rms = Math.sqrt(sumSquares / dataArray.length);
+          const normalizedLevel = Math.min(100, rms * 500);
+
+          if (normalizedLevel > peak) {
+            peak = normalizedLevel;
+          } else {
+            peak = Math.max(0, peak - 0.3);
+          }
+
+          setAudioLevel(normalizedLevel);
+          setPeakLevel(peak);
+
+          audioAnimationRef.current = requestAnimationFrame(updateLevel);
+        };
+
+        updateLevel();
+      } catch (error) {
+        console.error("Audio analyzer error:", error);
+      }
+    },
+    []
+  );
 
   const startCamera = useCallback(async () => {
     try {
@@ -774,12 +793,14 @@ export const VideoRecorder = ({
     }
   }, [recordedBlob, lessonId, toast, onVideoUploaded, isTrimMode, createTrimmedVideo, recordedFileExt, recordedMimeType]);
 
-  // Stop auto-scroll when recording stops
+  // Stop auto-scroll when recording stops (only on transition from recording -> not recording)
+  const wasRecordingRef = useRef(false);
   useEffect(() => {
-    if (!isRecording && isAutoScrolling) {
+    if (wasRecordingRef.current && !isRecording) {
       stopAutoScroll();
     }
-  }, [isRecording, isAutoScrolling, stopAutoScroll]);
+    wasRecordingRef.current = isRecording;
+  }, [isRecording, stopAutoScroll]);
 
   useEffect(() => {
     return () => {
