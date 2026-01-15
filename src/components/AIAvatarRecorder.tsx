@@ -173,6 +173,9 @@ export const AIAvatarRecorder = ({
       }
 
       const response = await supabase.functions.invoke("generate-video-content", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: {
           lessonTitle,
           lessonDescription: lessonDescription || "",
