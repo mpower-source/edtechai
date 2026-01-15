@@ -22,7 +22,10 @@ interface AIAvatarRecorderProps {
   script?: string;
   lessonId?: string;
   lessonTitle?: string;
+  lessonDescription?: string;
+  courseContext?: string;
   onVideoUploaded?: (videoUrl: string) => void;
+  onSaveScript?: (script: string) => void;
 }
 
 interface VoiceOption {
@@ -44,9 +47,13 @@ export const AIAvatarRecorder = ({
   script,
   lessonId,
   lessonTitle,
+  lessonDescription,
+  courseContext,
   onVideoUploaded,
+  onSaveScript,
 }: AIAvatarRecorderProps) => {
   const { toast } = useToast();
+  const [isRegeneratingScript, setIsRegeneratingScript] = useState(false);
   
   const [selectedVoice, setSelectedVoice] = useState(VOICE_OPTIONS[0].id);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -124,6 +131,64 @@ export const AIAvatarRecorder = ({
       });
     }
   }, [currentTime, audioDuration, isPlaying]);
+
+  const handleRegenerateScript = useCallback(async () => {
+    if (!lessonId || !lessonTitle) {
+      toast({
+        title: "Cannot regenerate script",
+        description: "Lesson information is missing",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsRegeneratingScript(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error("Please sign in to regenerate the script");
+      }
+
+      const response = await supabase.functions.invoke("generate-video-content", {
+        body: {
+          lessonTitle,
+          lessonDescription: lessonDescription || "",
+          courseContext: courseContext || "",
+        },
+      });
+
+      if (response.error) throw response.error;
+
+      const newScript = response.data?.content || "";
+      
+      // Update the database
+      const { error: updateError } = await supabase
+        .from("lessons")
+        .update({ video_content: newScript })
+        .eq("id", lessonId);
+
+      if (updateError) throw updateError;
+
+      // Notify parent of script update
+      onSaveScript?.(newScript);
+
+      toast({
+        title: "Script regenerated",
+        description: "A new script has been created for this lesson.",
+      });
+    } catch (error: any) {
+      console.error("Script regeneration error:", error);
+      toast({
+        title: "Regeneration failed",
+        description: error.message || "Failed to regenerate script",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRegeneratingScript(false);
+    }
+  }, [lessonId, lessonTitle, lessonDescription, courseContext, toast, onSaveScript]);
 
   const generateAudio = useCallback(async () => {
     if (!script?.trim()) {
@@ -414,8 +479,27 @@ export const AIAvatarRecorder = ({
         <Card className="overflow-hidden">
           <CardContent className="p-0">
             <div className="relative aspect-video bg-muted/30 flex flex-col">
-              <div className="px-4 py-3 border-b bg-background/50">
+              <div className="px-4 py-3 border-b bg-background/50 flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Script Preview</h3>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleRegenerateScript}
+                  disabled={isRegeneratingScript || !lessonId}
+                  className="h-8"
+                >
+                  {isRegeneratingScript ? (
+                    <>
+                      <RefreshCw className="h-3 w-3 mr-1.5 animate-spin" />
+                      Regenerating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3 w-3 mr-1.5" />
+                      Regenerate
+                    </>
+                  )}
+                </Button>
               </div>
               <div className="flex-1 overflow-hidden">
                 {script ? (
