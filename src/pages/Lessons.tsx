@@ -430,10 +430,13 @@ const Lessons = () => {
                       script={recordingLesson.video_content || undefined}
                       lessonId={recordingLesson.id}
                       lessonTitle={recordingLesson.title}
+                      lessonDescription={recordingLesson.description || undefined}
+                      courseContext={course?.title || undefined}
                       onVideoUploaded={() => {
                         setRecordingLesson(null);
                         fetchCourseAndLessons();
                       }}
+                      onSaveScript={(script) => handleSaveScript(recordingLesson.id, script)}
                     />
                   </TabsContent>
                 </Tabs>
