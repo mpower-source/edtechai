@@ -14,9 +14,13 @@ import {
   RefreshCw,
   User,
   Volume2,
-  Square
+  Square,
+  Pencil,
+  Save,
+  X
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 
 interface AIAvatarRecorderProps {
   script?: string;
@@ -54,6 +58,9 @@ export const AIAvatarRecorder = ({
 }: AIAvatarRecorderProps) => {
   const { toast } = useToast();
   const [isRegeneratingScript, setIsRegeneratingScript] = useState(false);
+  const [isEditingScript, setIsEditingScript] = useState(false);
+  const [editableScript, setEditableScript] = useState(script || "");
+  const [isSavingScript, setIsSavingScript] = useState(false);
   
   const [selectedVoice, setSelectedVoice] = useState(VOICE_OPTIONS[0].id);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -72,6 +79,11 @@ export const AIAvatarRecorder = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const animationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const scriptScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Sync editableScript when script prop changes
+  useEffect(() => {
+    setEditableScript(script || "");
+  }, [script]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -190,8 +202,51 @@ export const AIAvatarRecorder = ({
     }
   }, [lessonId, lessonTitle, lessonDescription, courseContext, toast, onSaveScript]);
 
+  const handleSaveScript = useCallback(async () => {
+    if (!lessonId) {
+      toast({
+        title: "Cannot save script",
+        description: "Lesson information is missing",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingScript(true);
+    try {
+      const { error: updateError } = await supabase
+        .from("lessons")
+        .update({ video_content: editableScript })
+        .eq("id", lessonId);
+
+      if (updateError) throw updateError;
+
+      onSaveScript?.(editableScript);
+      setIsEditingScript(false);
+
+      toast({
+        title: "Script saved",
+        description: "Your changes have been saved.",
+      });
+    } catch (error: any) {
+      console.error("Save script error:", error);
+      toast({
+        title: "Save failed",
+        description: error.message || "Failed to save script",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingScript(false);
+    }
+  }, [lessonId, editableScript, toast, onSaveScript]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditableScript(script || "");
+    setIsEditingScript(false);
+  }, [script]);
+
   const generateAudio = useCallback(async () => {
-    if (!script?.trim()) {
+    if (!editableScript?.trim()) {
       toast({
         title: "No script available",
         description: "Please generate or write a script first.",
@@ -220,7 +275,7 @@ export const AIAvatarRecorder = ({
             Authorization: `Bearer ${sessionData.session.access_token}`,
           },
           body: JSON.stringify({
-            script: script.trim(),
+            script: editableScript.trim(),
             voiceId: selectedVoice,
           }),
         }
@@ -272,7 +327,7 @@ export const AIAvatarRecorder = ({
       setIsGenerating(false);
       setGenerationProgress(0);
     }
-  }, [script, selectedVoice, audioUrl, toast]);
+  }, [editableScript, selectedVoice, audioUrl, toast]);
 
   const togglePlayback = useCallback(() => {
     if (!audioRef.current || !audioUrl) return;
@@ -480,35 +535,91 @@ export const AIAvatarRecorder = ({
           <CardContent className="p-0">
             <div className="relative aspect-video bg-muted/30 flex flex-col">
               <div className="px-4 py-3 border-b bg-background/50 flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Script Preview</h3>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleRegenerateScript}
-                  disabled={isRegeneratingScript || !lessonId}
-                  className="h-8"
-                >
-                  {isRegeneratingScript ? (
+                <h3 className="text-lg font-semibold">
+                  {isEditingScript ? "Edit Script" : "Script Preview"}
+                </h3>
+                <div className="flex items-center gap-2">
+                  {isEditingScript ? (
                     <>
-                      <RefreshCw className="h-3 w-3 mr-1.5 animate-spin" />
-                      Regenerating...
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleCancelEdit}
+                        disabled={isSavingScript}
+                        className="h-8"
+                      >
+                        <X className="h-3 w-3 mr-1.5" />
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleSaveScript}
+                        disabled={isSavingScript}
+                        className="h-8"
+                      >
+                        {isSavingScript ? (
+                          <>
+                            <RefreshCw className="h-3 w-3 mr-1.5 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-3 w-3 mr-1.5" />
+                            Save
+                          </>
+                        )}
+                      </Button>
                     </>
                   ) : (
                     <>
-                      <Sparkles className="h-3 w-3 mr-1.5" />
-                      Regenerate
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setIsEditingScript(true)}
+                        disabled={!editableScript}
+                        className="h-8"
+                      >
+                        <Pencil className="h-3 w-3 mr-1.5" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleRegenerateScript}
+                        disabled={isRegeneratingScript || !lessonId}
+                        className="h-8"
+                      >
+                        {isRegeneratingScript ? (
+                          <>
+                            <RefreshCw className="h-3 w-3 mr-1.5 animate-spin" />
+                            Regenerating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-3 w-3 mr-1.5" />
+                            Regenerate
+                          </>
+                        )}
+                      </Button>
                     </>
                   )}
-                </Button>
+                </div>
               </div>
               <div className="flex-1 overflow-hidden">
-                {script ? (
+                {isEditingScript ? (
+                  <Textarea
+                    value={editableScript}
+                    onChange={(e) => setEditableScript(e.target.value)}
+                    className="h-full w-full resize-none border-0 rounded-none focus-visible:ring-0 text-sm leading-relaxed"
+                    placeholder="Enter your script here..."
+                  />
+                ) : editableScript ? (
                   <div 
                     ref={scriptScrollRef}
                     className="h-full p-4 overflow-y-auto"
                   >
                     <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
-                      {script}
+                      {editableScript}
                     </pre>
                   </div>
                 ) : (
