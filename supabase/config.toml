@@ -4,7 +4,7 @@ project_id = "zzgjvujggxjcztsxafxs"
 verify_jwt = true
 
 [functions.lesson-content-generator]
-verify_jwt = true
+verify_jwt = false
 
 [functions.lesson-summarizer]
 verify_jwt = true
