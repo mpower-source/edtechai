@@ -445,7 +445,7 @@ export const AIAvatarRecorder = ({
   const selectedVoiceData = VOICE_OPTIONS.find(v => v.id === selectedVoice);
 
   return (
-    <div className="space-y-4">
+    <div className="grid lg:grid-cols-2 gap-6">
       {/* Hidden audio element */}
       <audio
         ref={audioRef}
@@ -453,12 +453,11 @@ export const AIAvatarRecorder = ({
         onEnded={handleAudioEnded}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
+        className="hidden"
       />
 
-      {/* Avatar Display + Script Preview - Side by Side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Avatar Display */}
-        <Card>
+      {/* Avatar Display */}
+      <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <User className="h-5 w-5" />
@@ -624,10 +623,9 @@ export const AIAvatarRecorder = ({
             )}
           </CardContent>
         </Card>
-      </div>
 
-      {/* Controls */}
-      <Card>
+        {/* Controls - spans full width below the two-column grid */}
+        <Card className="lg:col-span-2">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2">
             <User className="h-5 w-5" />
