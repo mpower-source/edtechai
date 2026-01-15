@@ -381,23 +381,29 @@ export const AIAvatarRecorder = ({
         </CardContent>
       </Card>
 
-        {/* Script Preview - Side by side with avatar */}
-        <Card className="flex flex-col">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Script Preview</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1">
-            {script ? (
-              <ScrollArea className="h-[250px] lg:h-full lg:max-h-[calc(100%-2rem)]">
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
-                  {script}
-                </pre>
-              </ScrollArea>
-            ) : (
-              <p className="text-muted-foreground text-center py-8">
-                No script available. Generate one first.
-              </p>
-            )}
+        {/* Script Preview - Same size as avatar */}
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            <div className="relative aspect-video bg-muted/30 flex flex-col">
+              <div className="px-4 py-3 border-b bg-background/50">
+                <h3 className="text-lg font-semibold">Script Preview</h3>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                {script ? (
+                  <ScrollArea className="h-full p-4">
+                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
+                      {script}
+                    </pre>
+                  </ScrollArea>
+                ) : (
+                  <div className="h-full flex items-center justify-center">
+                    <p className="text-muted-foreground text-center">
+                      No script available. Generate one first.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
