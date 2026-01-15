@@ -64,6 +64,7 @@ export const AIAvatarRecorder = ({
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const animationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const scriptScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -95,6 +96,34 @@ export const AIAvatarRecorder = ({
       }
     };
   }, [isSpeaking]);
+
+  // Auto-scroll script synced with audio playback
+  useEffect(() => {
+    if (!scriptScrollRef.current || audioDuration === 0) return;
+    
+    const scrollContainer = scriptScrollRef.current;
+    const scrollableHeight = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+    
+    if (scrollableHeight <= 0) return;
+    
+    // Calculate scroll position based on current time / total duration
+    const progress = currentTime / audioDuration;
+    const targetScrollTop = progress * scrollableHeight;
+    
+    if (isPlaying) {
+      // Smooth scroll during playback
+      scrollContainer.scrollTo({
+        top: targetScrollTop,
+        behavior: 'smooth'
+      });
+    } else if (currentTime === 0) {
+      // Reset to top when stopped
+      scrollContainer.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    }
+  }, [currentTime, audioDuration, isPlaying]);
 
   const generateAudio = useCallback(async () => {
     if (!script?.trim()) {
@@ -390,11 +419,14 @@ export const AIAvatarRecorder = ({
               </div>
               <div className="flex-1 overflow-hidden">
                 {script ? (
-                  <ScrollArea className="h-full p-4">
+                  <div 
+                    ref={scriptScrollRef}
+                    className="h-full p-4 overflow-y-auto"
+                  >
                     <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
                       {script}
                     </pre>
-                  </ScrollArea>
+                  </div>
                 ) : (
                   <div className="h-full flex items-center justify-center">
                     <p className="text-muted-foreground text-center">
