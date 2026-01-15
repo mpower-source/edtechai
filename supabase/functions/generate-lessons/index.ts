@@ -30,6 +30,8 @@ serve(async (req) => {
       );
     }
 
+    const token = authHeader.replace('Bearer ', '').trim();
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     
@@ -39,7 +41,7 @@ serve(async (req) => {
     });
 
     // Verify the user is authenticated
-    const { data: { user }, error: userError } = await userSupabase.auth.getUser();
+    const { data: { user }, error: userError } = await userSupabase.auth.getUser(token);
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
