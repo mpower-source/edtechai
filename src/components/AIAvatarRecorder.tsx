@@ -549,15 +549,15 @@ export const AIAvatarRecorder = ({
 
       {/* Avatar Display */}
       <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              AI Recorder
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Avatar Preview */}
-            <div className="relative aspect-video bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            AI Recorder
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Avatar Preview */}
+          <div className="relative aspect-video bg-muted rounded-lg overflow-hidden flex items-center justify-center">
             {/* Animated Avatar */}
             <div className="relative">
               {/* Avatar circle with glow effect when speaking */}
