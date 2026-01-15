@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -16,11 +15,9 @@ import {
   Volume2,
   Square,
   Pencil,
-  Save,
-  X
+  Save
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { Textarea } from "@/components/ui/textarea";
 
 interface AIAvatarRecorderProps {
   script?: string;
@@ -459,11 +456,18 @@ export const AIAvatarRecorder = ({
       />
 
       {/* Avatar Display + Script Preview - Side by Side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Avatar Display */}
-        <Card className="overflow-hidden">
-        <CardContent className="p-0">
-          <div className="relative aspect-video bg-gradient-to-br from-primary/20 via-background to-secondary/20 flex items-center justify-center">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <User className="h-5 w-5" />
+              AI Recorder
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Avatar Preview */}
+            <div className="relative aspect-video bg-muted rounded-lg overflow-hidden flex items-center justify-center">
             {/* Animated Avatar */}
             <div className="relative">
               {/* Avatar circle with glow effect when speaking */}
@@ -526,111 +530,98 @@ export const AIAvatarRecorder = ({
                 </div>
               </div>
             )}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* Script Preview - Same size as avatar */}
-        <Card className="overflow-hidden">
-          <CardContent className="p-0">
-            <div className="relative aspect-video bg-muted/30 flex flex-col">
-              <div className="px-4 py-3 border-b bg-background/50 flex items-center justify-between">
-                <h3 className="text-lg font-semibold">
-                  {isEditingScript ? "Edit Script" : "Script Preview"}
-                </h3>
-                <div className="flex items-center gap-2">
-                  {isEditingScript ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={handleCancelEdit}
-                        disabled={isSavingScript}
-                        className="h-8"
-                      >
-                        <X className="h-3 w-3 mr-1.5" />
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleSaveScript}
-                        disabled={isSavingScript}
-                        className="h-8"
-                      >
-                        {isSavingScript ? (
-                          <>
-                            <RefreshCw className="h-3 w-3 mr-1.5 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="h-3 w-3 mr-1.5" />
-                            Save
-                          </>
-                        )}
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setIsEditingScript(true)}
-                        disabled={!editableScript}
-                        className="h-8"
-                      >
-                        <Pencil className="h-3 w-3 mr-1.5" />
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleRegenerateScript}
-                        disabled={isRegeneratingScript || !lessonId}
-                        className="h-8"
-                      >
-                        {isRegeneratingScript ? (
-                          <>
-                            <RefreshCw className="h-3 w-3 mr-1.5 animate-spin" />
-                            Regenerating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-3 w-3 mr-1.5" />
-                            Regenerate
-                          </>
-                        )}
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="flex-1 overflow-hidden">
+        {/* Script Panel */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle>Video Script</CardTitle>
+            {editableScript && (
+              <div className="flex items-center gap-1">
                 {isEditingScript ? (
-                  <Textarea
-                    value={editableScript}
-                    onChange={(e) => setEditableScript(e.target.value)}
-                    className="h-full w-full resize-none border-0 rounded-none focus-visible:ring-0 text-sm leading-relaxed"
-                    placeholder="Enter your script here..."
-                  />
-                ) : editableScript ? (
-                  <div 
-                    ref={scriptScrollRef}
-                    className="h-full p-4 overflow-y-auto"
-                  >
-                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
-                      {editableScript}
-                    </pre>
-                  </div>
+                  <>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleSaveScript}
+                      disabled={isSavingScript}
+                      title="Save script"
+                    >
+                      {isSavingScript ? (
+                        <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-1" />
+                      )}
+                      Save
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCancelEdit}
+                      title="Cancel editing"
+                    >
+                      Cancel
+                    </Button>
+                  </>
                 ) : (
-                  <div className="h-full flex items-center justify-center">
-                    <p className="text-muted-foreground text-center">
-                      No script available. Generate one first.
-                    </p>
-                  </div>
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleRegenerateScript}
+                      disabled={isRegeneratingScript || !lessonId}
+                      title="Regenerate script"
+                    >
+                      {isRegeneratingScript ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setIsEditingScript(true)}
+                      title="Edit script"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </>
                 )}
               </div>
-            </div>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {editableScript ? (
+              <>
+                {/* Script Content - Editable or Read-only */}
+                {isEditingScript ? (
+                  <textarea
+                    value={editableScript}
+                    onChange={(e) => setEditableScript(e.target.value)}
+                    className="w-full h-[350px] p-4 text-lg leading-relaxed font-sans bg-background border border-input rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="Enter your video script here..."
+                  />
+                ) : (
+                  <div 
+                    ref={scriptScrollRef}
+                    className="h-[350px] overflow-y-auto pr-4 scroll-smooth"
+                  >
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <pre className="whitespace-pre-wrap font-sans text-lg leading-relaxed text-foreground">
+                        {editableScript}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="h-[350px] flex items-center justify-center text-muted-foreground">
+                <p>No script available. Generate one first.</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
