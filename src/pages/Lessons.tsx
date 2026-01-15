@@ -8,9 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Sparkles, Trash2, Save, Video, ClipboardList, FileText, Pencil, Camera } from "lucide-react";
+import { ArrowLeft, Plus, Sparkles, Trash2, Save, Video, ClipboardList, FileText, Pencil, Camera, User } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 import { VideoRecorder } from "@/components/VideoRecorder";
+import { AIAvatarRecorder } from "@/components/AIAvatarRecorder";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Lesson = Database["public"]["Tables"]["lessons"]["Row"];
 type LessonType = Database["public"]["Enums"]["lesson_type"];
@@ -389,25 +391,52 @@ const Lessons = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Camera className="h-5 w-5" />
-                  Record Video: {recordingLesson.title}
+                  <Video className="h-5 w-5" />
+                  Create Video: {recordingLesson.title}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <VideoRecorder
-                  script={recordingLesson.video_content || undefined}
-                  lessonId={recordingLesson.id}
-                  lessonTitle={recordingLesson.title}
-                  lessonDescription={recordingLesson.description || undefined}
-                  courseContext={course?.title || undefined}
-                  existingVideoUrl={recordingLesson.video_url}
-                  onVideoUploaded={() => {
-                    setRecordingLesson(null);
-                    fetchCourseAndLessons();
-                  }}
-                  onClose={() => setRecordingLesson(null)}
-                  onSaveScript={(script) => handleSaveScript(recordingLesson.id, script)}
-                />
+                <Tabs defaultValue="webcam" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-4">
+                    <TabsTrigger value="webcam" className="flex items-center gap-2">
+                      <Camera className="h-4 w-4" />
+                      Record Yourself
+                    </TabsTrigger>
+                    <TabsTrigger value="ai-avatar" className="flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      AI Avatar
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="webcam">
+                    <VideoRecorder
+                      script={recordingLesson.video_content || undefined}
+                      lessonId={recordingLesson.id}
+                      lessonTitle={recordingLesson.title}
+                      lessonDescription={recordingLesson.description || undefined}
+                      courseContext={course?.title || undefined}
+                      existingVideoUrl={recordingLesson.video_url}
+                      onVideoUploaded={() => {
+                        setRecordingLesson(null);
+                        fetchCourseAndLessons();
+                      }}
+                      onClose={() => setRecordingLesson(null)}
+                      onSaveScript={(script) => handleSaveScript(recordingLesson.id, script)}
+                    />
+                  </TabsContent>
+                  
+                  <TabsContent value="ai-avatar">
+                    <AIAvatarRecorder
+                      script={recordingLesson.video_content || undefined}
+                      lessonId={recordingLesson.id}
+                      lessonTitle={recordingLesson.title}
+                      onVideoUploaded={() => {
+                        setRecordingLesson(null);
+                        fetchCourseAndLessons();
+                      }}
+                    />
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           )}
