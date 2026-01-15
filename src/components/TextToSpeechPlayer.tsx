@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -8,150 +8,135 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Play, Pause, Square, Volume2 } from "lucide-react";
+import { Play, Pause, Square, Volume2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface TextToSpeechPlayerProps {
   text: string;
   className?: string;
 }
 
-interface VoiceInfo {
-  voice: SpeechSynthesisVoice;
-  label: string;
-  isLocal: boolean;
-}
+const AI_VOICES = [
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", gender: "Female" },
+  { id: "JBFqnCBsd6RMkjVDRZzb", name: "George", gender: "Male" },
+  { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", gender: "Male" },
+  { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura", gender: "Female" },
+  { id: "IKne3meq5aSn9XLyUdCD", name: "Charlie", gender: "Male" },
+  { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", gender: "Female" },
+  { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", gender: "Male" },
+  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", gender: "Female" },
+  { id: "nPczCjzI2devNBz1zQrb", name: "Brian", gender: "Male" },
+  { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily", gender: "Female" },
+];
 
 export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [voices, setVoices] = useState<VoiceInfo[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState<string>("");
-  const [rate, setRate] = useState(1);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState(AI_VOICES[0].id);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  useEffect(() => {
-    const loadVoices = () => {
-      const availableVoices = speechSynthesis.getVoices();
-      
-      // Sort voices: local voices first, then by name
-      const voiceOptions: VoiceInfo[] = availableVoices
-        .map((voice) => ({
-          voice,
-          label: `${voice.name} (${voice.lang})${voice.localService ? '' : ' ⚡'}`,
-          isLocal: voice.localService,
-        }))
-        .sort((a, b) => {
-          // Prioritize local voices (more reliable)
-          if (a.isLocal && !b.isLocal) return -1;
-          if (!a.isLocal && b.isLocal) return 1;
-          return a.voice.name.localeCompare(b.voice.name);
-        });
-      
-      setVoices(voiceOptions);
-      
-      // Set default voice (prefer local English voice for reliability)
-      if (voiceOptions.length > 0 && !selectedVoice) {
-        const localEnglishVoice = voiceOptions.find(v => v.isLocal && v.voice.lang.startsWith('en'));
-        const anyEnglishVoice = voiceOptions.find(v => v.voice.lang.startsWith('en'));
-        setSelectedVoice(localEnglishVoice?.voice.name || anyEnglishVoice?.voice.name || voiceOptions[0].voice.name);
-      }
-    };
-
-    loadVoices();
-    speechSynthesis.onvoiceschanged = loadVoices;
-
-    return () => {
-      speechSynthesis.cancel();
-      speechSynthesis.onvoiceschanged = null;
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-      }
-    };
-  }, [selectedVoice]);
-
-  // Cancel speech when voice changes to ensure clean state
-  useEffect(() => {
-    speechSynthesis.cancel();
-    setIsPlaying(false);
-    setIsPaused(false);
-  }, [selectedVoice]);
-
-  const speakText = useCallback(() => {
+  const generateAndPlay = useCallback(async () => {
     if (!text.trim()) return;
 
-    // Chrome bug workaround: cancel any pending speech first
-    speechSynthesis.cancel();
+    setIsLoading(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ text, voiceId: selectedVoice }),
+        }
+      );
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voiceInfo = voices.find(v => v.voice.name === selectedVoice);
-    if (voiceInfo) utterance.voice = voiceInfo.voice;
-    utterance.rate = rate;
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to generate speech");
+      }
 
-    utterance.onstart = () => {
+      const data = await response.json();
+      
+      // Create audio from base64
+      const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+      
+      // Stop any existing audio
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+
+      const audio = new Audio(audioUrl);
+      audio.playbackRate = playbackRate;
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        setIsPlaying(false);
+        setIsPaused(false);
+      };
+
+      audio.onerror = () => {
+        setIsPlaying(false);
+        setIsPaused(false);
+        toast.error("Failed to play audio");
+      };
+
+      await audio.play();
       setIsPlaying(true);
-      setIsPaused(false);
-    };
-
-    utterance.onend = () => {
-      setIsPlaying(false);
-      setIsPaused(false);
-    };
-
-    utterance.onerror = (event) => {
-      console.log('Speech error:', event.error);
-      setIsPlaying(false);
-      setIsPaused(false);
-    };
-
-    utteranceRef.current = utterance;
-    
-    // Small delay to ensure Chrome processes the voice change
-    retryTimeoutRef.current = setTimeout(() => {
-      speechSynthesis.speak(utterance);
-    }, 50);
-  }, [text, voices, selectedVoice, rate]);
+    } catch (error) {
+      console.error("TTS error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to generate speech");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [text, selectedVoice, playbackRate]);
 
   const handlePlay = () => {
-    if (isPaused) {
-      speechSynthesis.resume();
+    if (isPaused && audioRef.current) {
+      audioRef.current.play();
       setIsPaused(false);
       setIsPlaying(true);
       return;
     }
-
-    speakText();
-    setIsPlaying(true);
+    generateAndPlay();
   };
 
   const handlePause = () => {
-    speechSynthesis.pause();
-    setIsPaused(true);
-    setIsPlaying(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPaused(true);
+      setIsPlaying(false);
+    }
   };
 
   const handleStop = () => {
-    speechSynthesis.cancel();
-    if (retryTimeoutRef.current) {
-      clearTimeout(retryTimeoutRef.current);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
     }
     setIsPlaying(false);
     setIsPaused(false);
   };
 
-  if (!('speechSynthesis' in window)) {
-    return (
-      <div className={`text-sm text-muted-foreground ${className}`}>
-        Text-to-speech is not supported in your browser.
-      </div>
-    );
-  }
+  const handleRateChange = (newRate: number[]) => {
+    const rate = newRate[0];
+    setPlaybackRate(rate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+  };
 
   return (
     <div className={`flex flex-wrap items-center gap-3 p-3 bg-muted/50 rounded-lg ${className}`}>
       <div className="flex items-center gap-1">
         <Volume2 className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">Listen</span>
+        <span className="text-sm font-medium">AI Listen</span>
       </div>
 
       <div className="flex items-center gap-1">
@@ -160,11 +145,20 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
             variant="outline"
             size="sm"
             onClick={handlePlay}
-            disabled={!text.trim()}
+            disabled={!text.trim() || isLoading}
             className="h-8"
           >
-            <Play className="h-3 w-3 mr-1" />
-            {isPaused ? "Resume" : "Play"}
+            {isLoading ? (
+              <>
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Play className="h-3 w-3 mr-1" />
+                {isPaused ? "Resume" : "Play"}
+              </>
+            )}
           </Button>
         ) : (
           <Button
@@ -191,14 +185,14 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
         )}
       </div>
 
-      <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-        <SelectTrigger className="w-[180px] h-8 text-xs">
+      <Select value={selectedVoice} onValueChange={setSelectedVoice} disabled={isPlaying || isLoading}>
+        <SelectTrigger className="w-[140px] h-8 text-xs">
           <SelectValue placeholder="Select voice" />
         </SelectTrigger>
         <SelectContent>
-          {voices.map((v) => (
-            <SelectItem key={v.voice.name} value={v.voice.name} className="text-xs">
-              {v.label}
+          {AI_VOICES.map((voice) => (
+            <SelectItem key={voice.id} value={voice.id} className="text-xs">
+              {voice.name} ({voice.gender})
             </SelectItem>
           ))}
         </SelectContent>
@@ -207,14 +201,14 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Speed:</span>
         <Slider
-          value={[rate]}
-          onValueChange={([value]) => setRate(value)}
+          value={[playbackRate]}
+          onValueChange={handleRateChange}
           min={0.5}
           max={2}
           step={0.1}
           className="w-20"
         />
-        <span className="text-xs text-muted-foreground w-8">{rate}x</span>
+        <span className="text-xs text-muted-foreground w-8">{playbackRate}x</span>
       </div>
     </div>
   );
