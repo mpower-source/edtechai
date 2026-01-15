@@ -49,8 +49,16 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
 
     return () => {
       speechSynthesis.cancel();
+      speechSynthesis.onvoiceschanged = null;
     };
-  }, []);
+  }, [selectedVoice]);
+
+  // Cancel speech when voice changes to ensure clean state
+  useEffect(() => {
+    speechSynthesis.cancel();
+    setIsPlaying(false);
+    setIsPaused(false);
+  }, [selectedVoice]);
 
   const handlePlay = () => {
     if (isPaused) {
