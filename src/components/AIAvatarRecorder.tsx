@@ -15,7 +15,8 @@ import {
   Volume2,
   Square,
   Pencil,
-  Save
+  Save,
+  Headphones
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
@@ -69,6 +70,11 @@ export const AIAvatarRecorder = ({
   const [audioDuration, setAudioDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   
+  // Voice preview state
+  const [isPreviewingVoice, setIsPreviewingVoice] = useState(false);
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  
   // Avatar animation state
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [mouthOpen, setMouthOpen] = useState(false);
@@ -88,11 +94,14 @@ export const AIAvatarRecorder = ({
       if (audioUrl) {
         URL.revokeObjectURL(audioUrl);
       }
+      if (previewAudioUrl) {
+        URL.revokeObjectURL(previewAudioUrl);
+      }
       if (animationIntervalRef.current) {
         clearInterval(animationIntervalRef.current);
       }
     };
-  }, [audioUrl]);
+  }, [audioUrl, previewAudioUrl]);
 
   // Avatar mouth animation when speaking
   useEffect(() => {
@@ -241,6 +250,88 @@ export const AIAvatarRecorder = ({
     setEditableScript(script || "");
     setIsEditingScript(false);
   }, [script]);
+
+  const previewVoice = useCallback(async () => {
+    // Stop any existing preview
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current.currentTime = 0;
+    }
+    if (previewAudioUrl) {
+      URL.revokeObjectURL(previewAudioUrl);
+      setPreviewAudioUrl(null);
+    }
+
+    setIsPreviewingVoice(true);
+    
+    const selectedVoiceData = VOICE_OPTIONS.find(v => v.id === selectedVoice);
+    const sampleText = `Hello! I'm ${selectedVoiceData?.name || 'your AI narrator'}. This is how I'll sound when reading your lesson content.`;
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session?.access_token) {
+        throw new Error("Please sign in to preview voices");
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-avatar-video`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+          body: JSON.stringify({
+            script: sampleText,
+            voiceId: selectedVoice,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to generate preview: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.audioContent) {
+        throw new Error("No audio content received");
+      }
+
+      // Convert base64 to blob using data URI approach
+      const audioDataUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+      const audioResponse = await fetch(audioDataUrl);
+      const blob = await audioResponse.blob();
+      
+      const url = URL.createObjectURL(blob);
+      setPreviewAudioUrl(url);
+
+      // Play the preview
+      const audio = new Audio(url);
+      previewAudioRef.current = audio;
+      audio.onended = () => {
+        setIsPreviewingVoice(false);
+      };
+      await audio.play();
+    } catch (error: any) {
+      console.error("Voice preview error:", error);
+      toast({
+        title: "Preview failed",
+        description: error.message || "Failed to preview voice",
+        variant: "destructive",
+      });
+      setIsPreviewingVoice(false);
+    }
+  }, [selectedVoice, previewAudioUrl, toast]);
+
+  const stopPreview = useCallback(() => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current.currentTime = 0;
+    }
+    setIsPreviewingVoice(false);
+  }, []);
 
   const generateAudio = useCallback(async () => {
     if (!editableScript?.trim()) {
@@ -636,21 +727,36 @@ export const AIAvatarRecorder = ({
           {/* Voice Selection */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Select Voice</label>
-            <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {VOICE_OPTIONS.map((voice) => (
-                  <SelectItem key={voice.id} value={voice.id}>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{voice.name}</span>
-                      <span className="text-xs text-muted-foreground">{voice.description}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {VOICE_OPTIONS.map((voice) => (
+                    <SelectItem key={voice.id} value={voice.id}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{voice.name}</span>
+                        <span className="text-xs text-muted-foreground">{voice.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={isPreviewingVoice ? stopPreview : previewVoice}
+                disabled={isGenerating}
+                title={isPreviewingVoice ? "Stop preview" : "Preview voice"}
+              >
+                {isPreviewingVoice ? (
+                  <Square className="h-4 w-4" />
+                ) : (
+                  <Headphones className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
 
           {/* Generate Button */}
