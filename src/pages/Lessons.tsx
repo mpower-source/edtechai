@@ -12,6 +12,7 @@ import { ArrowLeft, Plus, Sparkles, Trash2, Save, Video, ClipboardList, FileText
 import type { Database } from "@/integrations/supabase/types";
 import { VideoRecorder } from "@/components/VideoRecorder";
 import { AIAvatarRecorder } from "@/components/AIAvatarRecorder";
+import { TextToSpeechPlayer } from "@/components/TextToSpeechPlayer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Lesson = Database["public"]["Tables"]["lessons"]["Row"];
@@ -491,6 +492,9 @@ const Lessons = () => {
                     placeholder="Text lesson content"
                     rows={5}
                   />
+                  {(editingLesson as any).text_content && (
+                    <TextToSpeechPlayer text={(editingLesson as any).text_content} />
+                  )}
                 </div>
 
                 <div className="space-y-2">
