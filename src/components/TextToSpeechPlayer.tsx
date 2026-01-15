@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -18,6 +18,7 @@ interface TextToSpeechPlayerProps {
 interface VoiceInfo {
   voice: SpeechSynthesisVoice;
   label: string;
+  isLocal: boolean;
 }
 
 export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerProps) => {
@@ -27,20 +28,33 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
   const [selectedVoice, setSelectedVoice] = useState<string>("");
   const [rate, setRate] = useState(1);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const loadVoices = () => {
       const availableVoices = speechSynthesis.getVoices();
-      const voiceOptions: VoiceInfo[] = availableVoices.map((voice) => ({
-        voice,
-        label: `${voice.name} (${voice.lang})`,
-      }));
+      
+      // Sort voices: local voices first, then by name
+      const voiceOptions: VoiceInfo[] = availableVoices
+        .map((voice) => ({
+          voice,
+          label: `${voice.name} (${voice.lang})${voice.localService ? '' : ' ⚡'}`,
+          isLocal: voice.localService,
+        }))
+        .sort((a, b) => {
+          // Prioritize local voices (more reliable)
+          if (a.isLocal && !b.isLocal) return -1;
+          if (!a.isLocal && b.isLocal) return 1;
+          return a.voice.name.localeCompare(b.voice.name);
+        });
+      
       setVoices(voiceOptions);
       
-      // Set default voice (prefer English)
+      // Set default voice (prefer local English voice for reliability)
       if (voiceOptions.length > 0 && !selectedVoice) {
-        const englishVoice = voiceOptions.find(v => v.voice.lang.startsWith('en'));
-        setSelectedVoice(englishVoice?.voice.name || voiceOptions[0].voice.name);
+        const localEnglishVoice = voiceOptions.find(v => v.isLocal && v.voice.lang.startsWith('en'));
+        const anyEnglishVoice = voiceOptions.find(v => v.voice.lang.startsWith('en'));
+        setSelectedVoice(localEnglishVoice?.voice.name || anyEnglishVoice?.voice.name || voiceOptions[0].voice.name);
       }
     };
 
@@ -50,6 +64,9 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
     return () => {
       speechSynthesis.cancel();
       speechSynthesis.onvoiceschanged = null;
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
     };
   }, [selectedVoice]);
 
@@ -60,6 +77,41 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
     setIsPaused(false);
   }, [selectedVoice]);
 
+  const speakText = useCallback(() => {
+    if (!text.trim()) return;
+
+    // Chrome bug workaround: cancel any pending speech first
+    speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voiceInfo = voices.find(v => v.voice.name === selectedVoice);
+    if (voiceInfo) utterance.voice = voiceInfo.voice;
+    utterance.rate = rate;
+
+    utterance.onstart = () => {
+      setIsPlaying(true);
+      setIsPaused(false);
+    };
+
+    utterance.onend = () => {
+      setIsPlaying(false);
+      setIsPaused(false);
+    };
+
+    utterance.onerror = (event) => {
+      console.log('Speech error:', event.error);
+      setIsPlaying(false);
+      setIsPaused(false);
+    };
+
+    utteranceRef.current = utterance;
+    
+    // Small delay to ensure Chrome processes the voice change
+    retryTimeoutRef.current = setTimeout(() => {
+      speechSynthesis.speak(utterance);
+    }, 50);
+  }, [text, voices, selectedVoice, rate]);
+
   const handlePlay = () => {
     if (isPaused) {
       speechSynthesis.resume();
@@ -68,27 +120,7 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
       return;
     }
 
-    if (!text.trim()) return;
-
-    speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voice = voices.find(v => v.voice.name === selectedVoice)?.voice;
-    if (voice) utterance.voice = voice;
-    utterance.rate = rate;
-
-    utterance.onend = () => {
-      setIsPlaying(false);
-      setIsPaused(false);
-    };
-
-    utterance.onerror = () => {
-      setIsPlaying(false);
-      setIsPaused(false);
-    };
-
-    utteranceRef.current = utterance;
-    speechSynthesis.speak(utterance);
+    speakText();
     setIsPlaying(true);
   };
 
@@ -100,6 +132,9 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
 
   const handleStop = () => {
     speechSynthesis.cancel();
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+    }
     setIsPlaying(false);
     setIsPaused(false);
   };
