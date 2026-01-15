@@ -19,12 +19,24 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const debug = new URL(req.url).searchParams.get('debug') === '1' || req.headers.get('x-debug') === '1';
+
   try {
-    // Verify JWT authentication
+    // Verify JWT authentication (signing-keys compatible)
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({
+          error: 'Unauthorized',
+          ...(debug
+            ? {
+                debug: {
+                  reason: !authHeader ? 'missing_authorization_header' : 'authorization_not_bearer',
+                  headerKeys: Array.from(req.headers.keys()),
+                },
+              }
+            : {}),
+        }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -34,16 +46,45 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey);
 
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
     const userId = claimsData?.claims?.sub;
 
     if (claimsError || !userId) {
+      let authUserStatus: number | null = null;
+      let authUserError: unknown = null;
+
+      if (debug) {
+        try {
+          const authResp = await fetch(`${supabaseUrl}/auth/v1/user`, {
+            headers: {
+              Authorization: authHeader,
+              apikey: supabaseAnonKey,
+            },
+          });
+          authUserStatus = authResp.status;
+          authUserError = await authResp.json().catch(() => null);
+        } catch (e) {
+          authUserError = e instanceof Error ? e.message : String(e);
+        }
+      }
+
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({
+          error: 'Unauthorized',
+          ...(debug
+            ? {
+                debug: {
+                  reason: claimsError ? 'claims_error' : 'missing_sub_claim',
+                  tokenLength: token.length,
+                  claimsError: claimsError ? (claimsError as any).message ?? String(claimsError) : null,
+                  authUserStatus,
+                  authUserError,
+                },
+              }
+            : {}),
+        }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
