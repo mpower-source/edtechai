@@ -1,40 +1,43 @@
 project_id = "zzgjvujggxjcztsxafxs"
 
 [functions.generate-course-outline]
-verify_jwt = true
+verify_jwt = false
 
 [functions.lesson-content-generator]
 verify_jwt = false
 
 [functions.lesson-summarizer]
-verify_jwt = true
+verify_jwt = false
 
 [functions.generate-video-content]
 verify_jwt = false
 
 [functions.generate-quiz]
-verify_jwt = true
+verify_jwt = false
 
 [functions.generate-assignment]
-verify_jwt = true
+verify_jwt = false
+
+[functions.generate-lessons]
+verify_jwt = false
 
 [functions.pricing-suggestions]
-verify_jwt = true
+verify_jwt = false
 
 [functions.marketing-headlines]
-verify_jwt = true
+verify_jwt = false
 
 [functions.competitor-analysis]
-verify_jwt = true
+verify_jwt = false
 
 [functions.analytics-insights]
-verify_jwt = true
+verify_jwt = false
 
 [functions.student-chatbot]
-verify_jwt = true
+verify_jwt = false
 
 [functions.content-suggestions]
-verify_jwt = true
+verify_jwt = false
 
 [functions.send-email]
 verify_jwt = true

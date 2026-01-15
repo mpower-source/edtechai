@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.84.0";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
@@ -41,15 +41,15 @@ serve(async (req) => {
     });
 
     // Verify the user is authenticated
-    const { data: { user }, error: userError } = await userSupabase.auth.getUser(token);
-    if (userError || !user) {
+    const { data: claimsData, error: claimsError } = await userSupabase.auth.getClaims(token);
+    const userId = claimsData?.claims?.sub;
+
+    if (claimsError || !userId) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const userId = user.id;
 
     // Parse and validate input
     const rawBody = await req.json();

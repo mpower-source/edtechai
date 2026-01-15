@@ -33,7 +33,7 @@ serve(async (req) => {
     const token = authHeader.replace('Bearer ', '').trim();
 
     // Verify the JWT token
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.39.3");
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.84.0");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     
@@ -42,8 +42,10 @@ serve(async (req) => {
     });
 
     // Verify the user is authenticated
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !user) {
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    const userId = claimsData?.claims?.sub;
+
+    if (claimsError || !userId) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
