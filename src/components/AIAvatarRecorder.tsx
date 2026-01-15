@@ -309,8 +309,10 @@ export const AIAvatarRecorder = ({
         onLoadedMetadata={handleLoadedMetadata}
       />
 
-      {/* Avatar Display */}
-      <Card className="overflow-hidden">
+      {/* Avatar Display + Script Preview - Side by Side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Avatar Display */}
+        <Card className="overflow-hidden">
         <CardContent className="p-0">
           <div className="relative aspect-video bg-gradient-to-br from-primary/20 via-background to-secondary/20 flex items-center justify-center">
             {/* Animated Avatar */}
@@ -378,6 +380,27 @@ export const AIAvatarRecorder = ({
           </div>
         </CardContent>
       </Card>
+
+        {/* Script Preview - Side by side with avatar */}
+        <Card className="flex flex-col">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Script Preview</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1">
+            {script ? (
+              <ScrollArea className="h-[250px] lg:h-full lg:max-h-[calc(100%-2rem)]">
+                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
+                  {script}
+                </pre>
+              </ScrollArea>
+            ) : (
+              <p className="text-muted-foreground text-center py-8">
+                No script available. Generate one first.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Controls */}
       <Card>
@@ -484,26 +507,6 @@ export const AIAvatarRecorder = ({
                 )}
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Script Preview */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg">Script Preview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {script ? (
-            <ScrollArea className="h-[200px]">
-              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
-                {script}
-              </pre>
-            </ScrollArea>
-          ) : (
-            <p className="text-muted-foreground text-center py-8">
-              No script available. Generate one first.
-            </p>
           )}
         </CardContent>
       </Card>
