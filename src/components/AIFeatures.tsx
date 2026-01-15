@@ -19,10 +19,26 @@ export const AIFeatures = ({ courseTitle, courseDescription, onContentGenerated 
   const [result, setResult] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  const getAccessTokenOrThrow = async () => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+
+    if (!accessToken) {
+      throw new Error("You must be signed in to use AI features.");
+    }
+
+    return accessToken;
+  };
+
   const generatePricingSuggestions = async () => {
     setLoading("pricing");
     try {
+      const accessToken = await getAccessTokenOrThrow();
+
       const { data, error } = await supabase.functions.invoke("pricing-suggestions", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: { courseTitle, courseDescription },
       });
 
@@ -45,7 +61,12 @@ export const AIFeatures = ({ courseTitle, courseDescription, onContentGenerated 
   const generateMarketingHeadlines = async () => {
     setLoading("marketing");
     try {
+      const accessToken = await getAccessTokenOrThrow();
+
       const { data, error } = await supabase.functions.invoke("marketing-headlines", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: { courseTitle, courseDescription },
       });
 
@@ -68,7 +89,12 @@ export const AIFeatures = ({ courseTitle, courseDescription, onContentGenerated 
   const generateContentSuggestions = async () => {
     setLoading("content");
     try {
+      const accessToken = await getAccessTokenOrThrow();
+
       const { data, error } = await supabase.functions.invoke("content-suggestions", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: { courseTitle, targetAudience: "General learners" },
       });
 

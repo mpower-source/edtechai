@@ -76,7 +76,17 @@ const Competitors = () => {
     setAiAnalyzing(true);
     
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error("You must be signed in to run competitor analysis.");
+      }
+
       const { data, error } = await supabase.functions.invoke("competitor-analysis", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: { competitors },
       });
 

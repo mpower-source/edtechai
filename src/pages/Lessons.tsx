@@ -61,7 +61,17 @@ const Lessons = () => {
 
     setGenerating(true);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error("You must be signed in to generate lessons.");
+      }
+
       const { data, error } = await supabase.functions.invoke("generate-lessons", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: {
           courseTitle: course.title,
           courseDescription: course.description,

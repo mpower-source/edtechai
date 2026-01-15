@@ -34,7 +34,17 @@ const CreateCourse = () => {
     setAiLoading(true);
 
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error("You must be signed in to use AI generation.");
+      }
+
       const { data, error } = await supabase.functions.invoke("generate-course-outline", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: { courseTitle: courseData.title },
       });
 
