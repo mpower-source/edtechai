@@ -75,7 +75,16 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are an expert educational content creator. Generate comprehensive, engaging lesson content based on the provided details.`
+            content: `You are an expert educational content creator. Generate comprehensive, engaging lesson content that will be read aloud via text-to-speech. 
+
+CRITICAL FORMATTING RULES:
+- Do NOT use any markdown formatting like ##, **, *, or numbered lists (1. 2. 3.)
+- Write in natural, flowing spoken English paragraphs
+- Use commas and periods for natural pauses
+- Start new paragraphs for topic transitions
+- For lists, write them as flowing sentences using "First," "Second," "Next," "Finally," etc.
+- Use phrases like "Let's begin with" or "Moving on to" instead of headings
+- Write as if you are speaking directly to the student`
           },
           {
             role: "user",
@@ -83,13 +92,13 @@ serve(async (req) => {
             
 Course Context: ${courseContext || "General course"}
 
-Please provide:
-1. Learning objectives (3-5 clear objectives)
-2. Main content (detailed explanation with examples)
-3. Key takeaways (3-5 points)
-4. Practice exercises or discussion questions
+Please provide content that flows naturally when read aloud, covering:
+- Learning objectives for this lesson
+- Main content with detailed explanations and examples
+- Key takeaways the student should remember
+- Practice exercises or discussion questions
 
-Format the content in clear sections with headings.`
+Remember to write in natural spoken English without any markdown formatting, numbers, or special characters.`
           }
         ],
       }),
