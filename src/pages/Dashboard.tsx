@@ -53,20 +53,36 @@ const Dashboard = () => {
   }, [courses]);
 
   const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
+    const { data: sessionData } = await supabase.auth.getSession();
+
+    if (!sessionData.session) {
       navigate("/auth");
       return;
     }
 
-    setUser(session.user);
+    // If the session is stale/invalid (bad_jwt), refresh or force re-login.
+    // This prevents the UI from thinking you're logged in while backend functions reject the token.
+    const { error: refreshError } = await supabase.auth.refreshSession();
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (refreshError || userError || !userData.user) {
+      await supabase.auth.signOut();
+      toast({
+        title: "Session expired",
+        description: "Please sign in again to use AI features.",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return;
+    }
+
+    setUser(userData.user);
 
     // Fetch profile
     const { data: profileData } = await supabase
       .from("profiles")
       .select("*")
-      .eq("id", session.user.id)
+      .eq("id", userData.user.id)
       .single();
 
     setProfile(profileData);

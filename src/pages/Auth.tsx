@@ -21,11 +21,18 @@ const Auth = () => {
   const initialMode = searchParams.get("mode") === "signup" ? "signup" : "signin";
 
   useEffect(() => {
-    // Check if user is already logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        navigate("/dashboard");
+    // Check if user is already logged in (and the token is still valid)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) return;
+
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) {
+        // Stale/invalid session in storage (e.g., bad_jwt)
+        await supabase.auth.signOut();
+        return;
       }
+
+      navigate("/dashboard");
     });
   }, [navigate]);
 
