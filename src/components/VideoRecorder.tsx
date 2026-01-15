@@ -26,7 +26,8 @@ import {
   ChevronDown,
   ChevronsUp,
   Pencil,
-  Save
+  Save,
+  Sparkles
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -34,6 +35,8 @@ interface VideoRecorderProps {
   script?: string;
   lessonId?: string;
   lessonTitle?: string;
+  lessonDescription?: string;
+  courseContext?: string;
   existingVideoUrl?: string | null;
   onVideoUploaded?: (videoUrl: string) => void;
   onClose?: () => void;
@@ -44,6 +47,8 @@ export const VideoRecorder = ({
   script, 
   lessonId, 
   lessonTitle,
+  lessonDescription,
+  courseContext,
   existingVideoUrl,
   onVideoUploaded,
   onClose,
@@ -94,6 +99,7 @@ export const VideoRecorder = ({
   const [scrollSpeed, setScrollSpeed] = useState(15); // pixels per second
   const [editableScript, setEditableScript] = useState(script || "");
   const [isEditingScript, setIsEditingScript] = useState(false);
+  const [isRegeneratingScript, setIsRegeneratingScript] = useState(false);
   const scriptContainerRef = useRef<HTMLDivElement>(null);
   const scrollAnimationRef = useRef<number | null>(null);
   const lastScrollTimeRef = useRef<number>(0);
@@ -447,6 +453,64 @@ export const VideoRecorder = ({
       scriptContainerRef.current.scrollTop = 0;
     }
   }, []);
+
+  const handleRegenerateScript = useCallback(async () => {
+    if (!lessonId || !lessonTitle) {
+      toast({
+        title: "Cannot regenerate script",
+        description: "Lesson information is missing",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsRegeneratingScript(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error("Please sign in to regenerate the script");
+      }
+
+      const response = await supabase.functions.invoke("generate-video-content", {
+        body: {
+          lessonTitle,
+          lessonDescription: lessonDescription || "",
+          courseContext: courseContext || "",
+        },
+      });
+
+      if (response.error) throw response.error;
+
+      const newScript = response.data?.content || "";
+      
+      // Update the database
+      const { error: updateError } = await supabase
+        .from("lessons")
+        .update({ video_content: newScript })
+        .eq("id", lessonId);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      setEditableScript(newScript);
+      onSaveScript?.(newScript);
+
+      toast({
+        title: "Script regenerated",
+        description: "A new voiceover script has been generated",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error regenerating script",
+        description: error.message || "Failed to regenerate script",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRegeneratingScript(false);
+    }
+  }, [lessonId, lessonTitle, lessonDescription, courseContext, toast, onSaveScript]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -1180,6 +1244,19 @@ export const VideoRecorder = ({
                 </>
               ) : (
                 <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleRegenerateScript}
+                    disabled={isRegeneratingScript}
+                    title="Regenerate script"
+                  >
+                    {isRegeneratingScript ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"

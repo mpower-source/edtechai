@@ -398,6 +398,8 @@ const Lessons = () => {
                   script={recordingLesson.video_content || undefined}
                   lessonId={recordingLesson.id}
                   lessonTitle={recordingLesson.title}
+                  lessonDescription={recordingLesson.description || undefined}
+                  courseContext={course?.title || undefined}
                   existingVideoUrl={recordingLesson.video_url}
                   onVideoUploaded={() => {
                     setRecordingLesson(null);
