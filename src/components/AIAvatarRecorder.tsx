@@ -16,7 +16,8 @@ import {
   Square,
   Pencil,
   Save,
-  Headphones
+  Headphones,
+  X
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
@@ -28,6 +29,7 @@ interface AIAvatarRecorderProps {
   courseContext?: string;
   onVideoUploaded?: (videoUrl: string) => void;
   onSaveScript?: (script: string) => void;
+  onClose?: () => void;
 }
 
 interface VoiceOption {
@@ -53,6 +55,7 @@ export const AIAvatarRecorder = ({
   courseContext,
   onVideoUploaded,
   onSaveScript,
+  onClose,
 }: AIAvatarRecorderProps) => {
   const { toast } = useToast();
   const [isRegeneratingScript, setIsRegeneratingScript] = useState(false);
@@ -554,6 +557,11 @@ export const AIAvatarRecorder = ({
             <User className="h-5 w-5" />
             AI Recorder
           </CardTitle>
+          {onClose && (
+            <Button variant="ghost" size="icon" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Avatar Preview */}

@@ -436,6 +436,7 @@ const Lessons = () => {
                         setRecordingLesson(null);
                         fetchCourseAndLessons();
                       }}
+                      onClose={() => setRecordingLesson(null)}
                       onSaveScript={(script) => handleSaveScript(recordingLesson.id, script)}
                     />
                   </TabsContent>
