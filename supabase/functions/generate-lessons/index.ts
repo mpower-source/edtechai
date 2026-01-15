@@ -10,10 +10,49 @@ const corsHeaders = {
 
 // Input validation schema
 const generateLessonsSchema = z.object({
-  courseTitle: z.string().min(1, "Course title is required").max(200, "Course title too long"),
-  courseDescription: z.string().max(2000, "Course description too long").optional(),
-  courseId: z.string().uuid("Invalid course ID format")
+  courseTitle: z
+    .string()
+    .min(1, "Course title is required")
+    .max(200, "Course title too long"),
+  courseDescription: z
+    .string()
+    .max(2000, "Course description too long")
+    .optional(),
+  courseId: z.string().uuid("Invalid course ID format"),
 });
+
+// AI output validation (keep this small and strict to avoid invalid JSON)
+const aiLessonSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().min(1).max(2000),
+  lesson_type: z.enum(["text", "video", "quiz", "assignment"]).default("text"),
+  duration_minutes: z.coerce.number().int().min(1).max(600).default(30),
+});
+
+const aiLessonsResponseSchema = z.object({
+  lessons: z.array(aiLessonSchema).min(3).max(12),
+});
+
+function extractJsonCandidate(text: string) {
+  // Remove common markdown code fences if present
+  const cleaned = text
+    .replace(/```json/gi, "```")
+    .replace(/```/g, "")
+    .trim();
+
+  const firstBrace = cleaned.indexOf("{");
+  const firstBracket = cleaned.indexOf("[");
+  const starts = [firstBrace, firstBracket].filter((i) => i >= 0);
+  if (starts.length === 0) return cleaned;
+
+  const start = Math.min(...starts);
+  const lastBrace = cleaned.lastIndexOf("}");
+  const lastBracket = cleaned.lastIndexOf("]");
+  const end = Math.max(lastBrace, lastBracket);
+
+  if (end > start) return cleaned.slice(start, end + 1);
+  return cleaned.slice(start);
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -97,22 +136,33 @@ serve(async (req) => {
       );
     }
 
-    const systemPrompt = `You are an expert course designer. Generate a comprehensive lesson plan for an online course.
-Return a JSON array of lessons, where each lesson has:
-- title: string (clear, engaging lesson title)
-- description: string (2-3 sentences describing what students will learn)
-- content: string (detailed lesson content in markdown format, minimum 500 words)
-- lesson_type: "text" | "video" | "quiz" | "assignment"
-- duration_minutes: number (estimated time to complete)
+    const systemPrompt = `You are an expert course designer.
 
-Generate 5-8 lessons that provide comprehensive coverage of the topic.
-Include a mix of different lesson types.
-Ensure content is educational, well-structured, and actionable.`;
+Return ONLY valid JSON (no markdown, no code fences, no commentary) matching this shape:
+
+{
+  "lessons": [
+    {
+      "title": string,
+      "description": string,
+      "lesson_type": "text" | "video" | "quiz" | "assignment",
+      "duration_minutes": number
+    }
+  ]
+}
+
+Rules:
+- Generate 5-8 lessons.
+- Titles: <= 120 characters.
+- Descriptions: 1-2 sentences, plain text.
+- duration_minutes: integer 5-60.
+- Include a mix of lesson_type values across lessons.
+- Ensure the JSON is strictly valid. Use double quotes for keys/strings and escape newlines as \\n inside strings.`;
 
     const userPrompt = `Course Title: ${courseTitle}
 ${courseDescription ? `Course Description: ${courseDescription}` : ""}
 
-Generate a complete lesson plan with detailed content for each lesson.`;
+Generate the lesson list.`;
 
     console.log("Calling Lovable AI for lesson generation...");
     const response = await fetch(
@@ -123,14 +173,15 @@ Generate a complete lesson plan with detailed content for each lesson.`;
           Authorization: `Bearer ${LOVABLE_API_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          response_format: { type: "json_object" },
-        }),
+          body: JSON.stringify({
+            model: "google/gemini-3-flash-preview",
+            temperature: 0.2,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            response_format: { type: "json_object" },
+          }),
       }
     );
 
@@ -172,17 +223,21 @@ Generate a complete lesson plan with detailed content for each lesson.`;
     }
 
     const data = await response.json();
-    const content = data.choices[0].message.content;
+    const content = data.choices?.[0]?.message?.content ?? "";
     console.log("Received AI response");
 
-    let lessonsData;
+    const jsonCandidate = extractJsonCandidate(content);
+
+    let parsedJson: unknown;
     try {
-      const parsed = JSON.parse(content);
-      lessonsData = parsed.lessons || parsed;
+      parsedJson = JSON.parse(jsonCandidate);
     } catch (e) {
       console.error("Failed to parse AI response:", e);
+      console.error("AI raw (truncated):", content.slice(0, 2000));
       return new Response(
-        JSON.stringify({ error: "Failed to parse lesson data" }),
+        JSON.stringify({
+          error: "Failed to parse lesson data",
+        }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -190,8 +245,13 @@ Generate a complete lesson plan with detailed content for each lesson.`;
       );
     }
 
-    if (!Array.isArray(lessonsData)) {
-      console.error("Lessons data is not an array:", lessonsData);
+    const normalized = Array.isArray(parsedJson)
+      ? { lessons: parsedJson }
+      : (parsedJson as Record<string, unknown>);
+
+    const lessonsParse = aiLessonsResponseSchema.safeParse(normalized);
+    if (!lessonsParse.success) {
+      console.error("AI lesson schema validation failed:", lessonsParse.error);
       return new Response(
         JSON.stringify({ error: "Invalid lesson data format" }),
         {
@@ -201,19 +261,23 @@ Generate a complete lesson plan with detailed content for each lesson.`;
       );
     }
 
+    const lessonsData = lessonsParse.data.lessons;
+
     // Use service role key for the insert (after ownership is verified)
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const lessonsToInsert = lessonsData.map((lesson: any, index: number) => ({
+    const lessonsToInsert = lessonsData.map((lesson, index) => ({
       course_id: courseId,
-      title: String(lesson.title || '').substring(0, 500),
-      description: String(lesson.description || '').substring(0, 2000),
-      content: String(lesson.content || '').substring(0, 50000),
-      lesson_type: ["text", "video", "quiz", "assignment"].includes(lesson.lesson_type) 
-        ? lesson.lesson_type 
+      title: String(lesson.title || "").substring(0, 500),
+      description: String(lesson.description || "").substring(0, 2000),
+      lesson_type: ["text", "video", "quiz", "assignment"].includes(lesson.lesson_type)
+        ? lesson.lesson_type
         : "text",
-      duration_minutes: Math.min(Math.max(Number(lesson.duration_minutes) || 30, 1), 600),
+      duration_minutes: Math.min(
+        Math.max(Number(lesson.duration_minutes) || 30, 1),
+        600
+      ),
       order_index: index,
       is_free: index === 0,
     }));
