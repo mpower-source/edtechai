@@ -30,6 +30,8 @@ serve(async (req) => {
       );
     }
 
+    const token = authHeader.replace('Bearer ', '').trim();
+
     // Verify the JWT token
     const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.39.3");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -40,7 +42,7 @@ serve(async (req) => {
     });
 
     // Verify the user is authenticated
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
