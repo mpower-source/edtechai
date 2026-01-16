@@ -634,7 +634,7 @@ const Lessons = () => {
                   {lessons.map((lesson, index) => (
                     <div
                       key={lesson.id}
-                      className="relative flex flex-col md:flex-row md:items-start md:justify-between p-4 border border-border rounded-lg hover:bg-accent/50 transition-colors"
+                      className="relative flex flex-col p-4 border border-border rounded-lg hover:bg-accent/50 transition-colors"
                     >
                       {/* Edit/Delete buttons - top right on mobile only */}
                       <div className="absolute top-2 right-2 flex gap-1 md:hidden">
@@ -654,83 +654,87 @@ const Lessons = () => {
                         </Button>
                       </div>
 
-                      {/* Title and Description */}
-                      <div className="flex-1 pr-20 md:pr-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-semibold text-muted-foreground">
-                            {index + 1}.
-                          </span>
-                          <h3 className="font-semibold text-foreground">
-                            {lesson.title}
-                          </h3>
+                      {/* Title row with buttons on desktop */}
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between">
+                        <div className="flex-1 pr-20 md:pr-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-semibold text-muted-foreground">
+                              {index + 1}.
+                            </span>
+                            <h3 className="font-semibold text-foreground">
+                              {lesson.title}
+                            </h3>
+                          </div>
                         </div>
-                        {lesson.description && (
-                          <p className="text-sm text-muted-foreground line-clamp-2">
-                            {lesson.description}
-                          </p>
-                        )}
-                      </div>
 
-                      {/* AI Generation buttons - below content on mobile, inline on desktop */}
-                      <div className="flex flex-wrap gap-2 mt-3 md:mt-0">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleGenerateContent(lesson, 'text')}
-                          disabled={generatingContent?.lessonId === lesson.id}
-                        >
-                          Text
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRecordClick(lesson)}
-                          disabled={generatingScript === lesson.id}
-                        >
-                          Record
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleGenerateContent(lesson, 'quiz')}
-                          disabled={generatingContent?.lessonId === lesson.id}
-                        >
-                          Quiz
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleGenerateContent(lesson, 'assignment')}
-                          disabled={generatingContent?.lessonId === lesson.id}
-                        >
-                          Assignment
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleGenerateContent(lesson, 'video')}
-                          disabled={generatingContent?.lessonId === lesson.id}
-                        >
-                          Video
-                        </Button>
-                        {/* Edit/Delete buttons - hidden on mobile, shown on desktop */}
-                        <div className="hidden md:flex gap-2">
+                        {/* AI Generation buttons - inline on desktop */}
+                        <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setEditingLesson(lesson)}
+                            onClick={() => handleGenerateContent(lesson, 'text')}
+                            disabled={generatingContent?.lessonId === lesson.id}
                           >
-                            <Pencil className="h-4 w-4 text-blue-500" />
+                            Text
                           </Button>
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            onClick={() => handleDeleteLesson(lesson.id)}
+                            onClick={() => handleRecordClick(lesson)}
+                            disabled={generatingScript === lesson.id}
                           >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            Record
                           </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGenerateContent(lesson, 'quiz')}
+                            disabled={generatingContent?.lessonId === lesson.id}
+                          >
+                            Quiz
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGenerateContent(lesson, 'assignment')}
+                            disabled={generatingContent?.lessonId === lesson.id}
+                          >
+                            Assignment
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGenerateContent(lesson, 'video')}
+                            disabled={generatingContent?.lessonId === lesson.id}
+                          >
+                            Video
+                          </Button>
+                          {/* Edit/Delete buttons - hidden on mobile, shown on desktop */}
+                          <div className="hidden md:flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditingLesson(lesson)}
+                            >
+                              <Pencil className="h-4 w-4 text-blue-500" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteLesson(lesson.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
+
+                      {/* Description - full width */}
+                      {lesson.description && (
+                        <p className="text-sm text-muted-foreground line-clamp-2 mt-2">
+                          {lesson.description}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
