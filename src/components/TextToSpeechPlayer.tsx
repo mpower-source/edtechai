@@ -385,7 +385,7 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
   const loadingText = isTranslating ? "Translating..." : "Loading...";
 
   return (
-    <div className={`flex flex-col gap-3 p-3 bg-muted/50 rounded-lg ${className}`}>
+    <div className={`flex flex-col gap-3 p-3 rounded-lg transition-colors ${isPlaying ? 'bg-primary/10' : 'bg-muted/50'} ${className}`}>
       {/* Header with AI toggle */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -429,7 +429,7 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
               variant="outline"
               size="sm"
               onClick={handlePause}
-              className="h-8"
+              className="h-8 bg-primary/10 border-primary/30"
             >
               <Pause className="h-3 w-3 mr-1" />
               Pause
