@@ -654,25 +654,87 @@ const Lessons = () => {
                         </Button>
                       </div>
 
-                      {/* Title - with padding for mobile edit/delete buttons */}
-                      <div className="flex items-center gap-2 pr-20 md:pr-0">
-                        <span className="text-sm font-semibold text-muted-foreground">
-                          {index + 1}.
-                        </span>
-                        <h3 className="font-semibold text-foreground">
-                          {lesson.title}
-                        </h3>
+                      {/* Desktop: Title and buttons on same row */}
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between">
+                        <div className="flex-1 pr-20 md:pr-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-muted-foreground">
+                              {index + 1}.
+                            </span>
+                            <h3 className="font-semibold text-foreground">
+                              {lesson.title}
+                            </h3>
+                          </div>
+                        </div>
+
+                        {/* AI Generation buttons - inline on desktop */}
+                        <div className="hidden md:flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGenerateContent(lesson, 'text')}
+                            disabled={generatingContent?.lessonId === lesson.id}
+                          >
+                            Text
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRecordClick(lesson)}
+                            disabled={generatingScript === lesson.id}
+                          >
+                            Record
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGenerateContent(lesson, 'quiz')}
+                            disabled={generatingContent?.lessonId === lesson.id}
+                          >
+                            Quiz
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGenerateContent(lesson, 'assignment')}
+                            disabled={generatingContent?.lessonId === lesson.id}
+                          >
+                            Assignment
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGenerateContent(lesson, 'video')}
+                            disabled={generatingContent?.lessonId === lesson.id}
+                          >
+                            Video
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditingLesson(lesson)}
+                          >
+                            <Pencil className="h-4 w-4 text-blue-500" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteLesson(lesson.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </div>
 
-                      {/* Description - mobile only, full width below title */}
+                      {/* Description - full width below title on both, but mobile shows before buttons */}
                       {lesson.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-2 mt-1 md:hidden">
+                        <p className="text-sm text-muted-foreground line-clamp-2 mt-1 md:mt-2">
                           {lesson.description}
                         </p>
                       )}
 
-                      {/* AI Generation buttons row */}
-                      <div className="flex flex-wrap gap-2 mt-2 md:justify-end">
+                      {/* Mobile only: AI Generation buttons below description */}
+                      <div className="flex flex-wrap gap-2 mt-2 md:hidden">
                         <Button
                           variant="outline"
                           size="sm"
@@ -713,31 +775,7 @@ const Lessons = () => {
                         >
                           Video
                         </Button>
-                        {/* Edit/Delete buttons - hidden on mobile, shown on desktop */}
-                        <div className="hidden md:flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setEditingLesson(lesson)}
-                          >
-                            <Pencil className="h-4 w-4 text-blue-500" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteLesson(lesson.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
                       </div>
-                      
-                      {/* Description - desktop only, full width below */}
-                      {lesson.description && (
-                        <p className="hidden md:block text-sm text-muted-foreground line-clamp-2 mt-2">
-                          {lesson.description}
-                        </p>
-                      )}
                     </div>
                   ))}
                 </div>
