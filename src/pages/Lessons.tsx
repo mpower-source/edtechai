@@ -634,9 +634,28 @@ const Lessons = () => {
                   {lessons.map((lesson, index) => (
                     <div
                       key={lesson.id}
-                      className="flex items-start justify-between p-4 border border-border rounded-lg hover:bg-accent/50 transition-colors"
+                      className="relative flex flex-col md:flex-row md:items-start md:justify-between p-4 border border-border rounded-lg hover:bg-accent/50 transition-colors"
                     >
-                      <div className="flex-1">
+                      {/* Edit/Delete buttons - top right on mobile, inline on desktop */}
+                      <div className="absolute top-2 right-2 flex gap-1 md:hidden">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingLesson(lesson)}
+                        >
+                          <Pencil className="h-4 w-4 text-blue-500" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteLesson(lesson.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+
+                      {/* Title and Description */}
+                      <div className="flex-1 pr-20 md:pr-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-sm font-semibold text-muted-foreground">
                             {index + 1}.
@@ -651,7 +670,9 @@ const Lessons = () => {
                           </p>
                         )}
                       </div>
-                      <div className="flex flex-wrap gap-2">
+
+                      {/* AI Generation buttons - below content on mobile, inline on desktop */}
+                      <div className="flex flex-wrap gap-2 mt-3 md:mt-0">
                         <Button
                           variant="outline"
                           size="sm"
@@ -705,20 +726,23 @@ const Lessons = () => {
                             ? "Generating..." 
                             : "Video"}
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditingLesson(lesson)}
-                        >
-                          <Pencil className="h-4 w-4 text-blue-500" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteLesson(lesson.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        {/* Edit/Delete buttons - hidden on mobile, shown on desktop */}
+                        <div className="hidden md:flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditingLesson(lesson)}
+                          >
+                            <Pencil className="h-4 w-4 text-blue-500" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteLesson(lesson.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
