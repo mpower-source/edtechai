@@ -657,7 +657,7 @@ const Lessons = () => {
                       {/* Title row with buttons on desktop */}
                       <div className="flex flex-col md:flex-row md:items-start md:justify-between">
                         <div className="flex-1 pr-20 md:pr-0">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-muted-foreground">
                               {index + 1}.
                             </span>
@@ -665,12 +665,6 @@ const Lessons = () => {
                               {lesson.title}
                             </h3>
                           </div>
-                          {/* Description - full width on mobile, inline on desktop */}
-                          {lesson.description && (
-                            <p className="text-sm text-muted-foreground line-clamp-2 md:pr-4">
-                              {lesson.description}
-                            </p>
-                          )}
                         </div>
 
                         {/* AI Generation buttons - inline on desktop */}
@@ -734,6 +728,13 @@ const Lessons = () => {
                           </div>
                         </div>
                       </div>
+                      
+                      {/* Description - full width below title and buttons */}
+                      {lesson.description && (
+                        <p className="text-sm text-muted-foreground line-clamp-2 mt-2">
+                          {lesson.description}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
