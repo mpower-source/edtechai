@@ -434,6 +434,8 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
       
       utteranceRef.current = utterance;
       speechSynthesis.speak(utterance);
+      // Keep isPlaying true since we're continuing playback
+      setIsPlaying(true);
     }
   };
 
