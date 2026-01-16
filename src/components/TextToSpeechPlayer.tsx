@@ -67,6 +67,10 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
   const [isTranslating, setIsTranslating] = useState(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const translatedTextRef = useRef<string>("");
+  
+  // Detect mobile for pause/resume workaround
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   // Language code mapping for voice matching
   const langCodeMap: Record<string, string> = {
@@ -191,30 +195,10 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
     };
   }, [selectedVoice]);
 
-  const handlePlayBrowser = async () => {
-    if (isPaused) {
-      speechSynthesis.resume();
-      setIsPaused(false);
-      setIsPlaying(true);
-      return;
-    }
-
-    if (!text.trim()) return;
-
-    speechSynthesis.cancel();
-
-    // Check if we have a voice for the target language before translating
+  // Helper to speak text (used for both initial play and resume on mobile)
+  const speakText = (textToSpeak: string) => {
     const targetLangCode = langCodeMap[selectedLanguage] || 'en';
-    const langVoices = getVoicesForLanguage(targetLangCode);
     
-    if (selectedLanguage !== 'en' && langVoices.length === 0) {
-      toast.error(`No ${LANGUAGES.find(l => l.code === selectedLanguage)?.name} voice available on this device. Please try a different language or switch to AI Voice.`);
-      return;
-    }
-
-    // Translate text if needed
-    const textToSpeak = await translateText(text);
-
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     
     // Use the currently selected voice (already synced to language)
@@ -237,12 +221,55 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
       console.error("Speech synthesis error:", event);
       setIsPlaying(false);
       setIsPaused(false);
-      toast.error("Failed to play audio. This voice may not support the selected language.");
+      // Only show error if it's not a cancelled speech
+      if (event.error !== 'canceled' && event.error !== 'interrupted') {
+        toast.error("Failed to play audio. Try a different voice or language.");
+      }
     };
 
     utteranceRef.current = utterance;
     speechSynthesis.speak(utterance);
     setIsPlaying(true);
+  };
+
+  const handlePlayBrowser = async () => {
+    // Handle resume - on mobile, restart from beginning; on desktop, use resume
+    if (isPaused) {
+      if (isMobile) {
+        // Mobile: restart from beginning (pause/resume unreliable)
+        speechSynthesis.cancel();
+        if (translatedTextRef.current) {
+          speakText(translatedTextRef.current);
+        }
+      } else {
+        speechSynthesis.resume();
+      }
+      setIsPaused(false);
+      setIsPlaying(true);
+      return;
+    }
+
+    if (!text.trim()) return;
+
+    // Always cancel any pending speech first
+    speechSynthesis.cancel();
+
+    // Check if we have a voice for the target language before translating
+    const targetLangCode = langCodeMap[selectedLanguage] || 'en';
+    const langVoices = getVoicesForLanguage(targetLangCode);
+    
+    if (selectedLanguage !== 'en' && langVoices.length === 0) {
+      toast.error(`No ${LANGUAGES.find(l => l.code === selectedLanguage)?.name} voice available on this device. Please try a different language or switch to AI Voice.`);
+      return;
+    }
+
+    // Translate text if needed
+    const textToSpeak = await translateText(text);
+    
+    // Store for potential mobile resume
+    translatedTextRef.current = textToSpeak;
+    
+    speakText(textToSpeak);
   };
 
   const handlePlayAI = async () => {
@@ -341,7 +368,12 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
     if (useAIVoice && audioRef.current) {
       audioRef.current.pause();
     } else {
-      speechSynthesis.pause();
+      // On mobile, cancel instead of pause (pause is unreliable)
+      if (isMobile) {
+        speechSynthesis.cancel();
+      } else {
+        speechSynthesis.pause();
+      }
     }
     setIsPaused(true);
     setIsPlaying(false);
