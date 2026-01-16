@@ -645,7 +645,7 @@ const Lessons = () => {
                   {lessons.map((lesson, index) => (
                     <div
                       key={lesson.id}
-                      className="relative flex flex-col p-4 border border-border rounded-lg hover:bg-accent/50 transition-colors"
+                      className="relative flex flex-col p-4 border border-border rounded-lg hover:bg-primary/10 transition-colors"
                     >
                       {/* Edit/Delete buttons - top right on mobile only */}
                       <div className="absolute top-2 right-2 flex gap-1 md:hidden">
