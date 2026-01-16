@@ -85,8 +85,17 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
     return voices.filter(v => v.voice.lang.startsWith(langCode));
   };
 
-  // Auto-select voice when language changes
+  // Auto-select voice and reset playback when language changes
   useEffect(() => {
+    // Cancel any ongoing speech when language changes
+    speechSynthesis.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setIsPlaying(false);
+    setIsPaused(false);
+    
     if (!useAIVoice && voices.length > 0) {
       const targetLangCode = langCodeMap[selectedLanguage] || 'en';
       const langVoices = getVoicesForLanguage(targetLangCode);
