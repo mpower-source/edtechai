@@ -68,6 +68,40 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Language code mapping for voice matching
+  const langCodeMap: Record<string, string> = {
+    en: 'en',
+    es: 'es',
+    fr: 'fr',
+    de: 'de',
+    pt: 'pt',
+    zh: 'zh',
+    ja: 'ja',
+    th: 'th',
+  };
+
+  // Get voices for a specific language
+  const getVoicesForLanguage = (langCode: string) => {
+    return voices.filter(v => v.voice.lang.startsWith(langCode));
+  };
+
+  // Auto-select voice when language changes
+  useEffect(() => {
+    if (!useAIVoice && voices.length > 0) {
+      const targetLangCode = langCodeMap[selectedLanguage] || 'en';
+      const langVoices = getVoicesForLanguage(targetLangCode);
+      
+      if (langVoices.length > 0) {
+        // Prefer Google voices, then any available
+        const googleVoice = langVoices.find(v => v.voice.name.toLowerCase().includes('google'));
+        setSelectedVoice(googleVoice?.voice.name || langVoices[0].voice.name);
+      } else if (selectedLanguage !== 'en') {
+        // No voice for this language - warn user
+        toast.warning(`No ${LANGUAGES.find(l => l.code === selectedLanguage)?.name} voice found on this device. Playback may not work correctly.`);
+      }
+    }
+  }, [selectedLanguage, voices, useAIVoice]);
+
   const translateText = async (textToTranslate: string): Promise<string> => {
     if (selectedLanguage === "en") {
       return textToTranslate;
@@ -160,45 +194,26 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
 
     speechSynthesis.cancel();
 
+    // Check if we have a voice for the target language before translating
+    const targetLangCode = langCodeMap[selectedLanguage] || 'en';
+    const langVoices = getVoicesForLanguage(targetLangCode);
+    
+    if (selectedLanguage !== 'en' && langVoices.length === 0) {
+      toast.error(`No ${LANGUAGES.find(l => l.code === selectedLanguage)?.name} voice available on this device. Please try a different language or switch to AI Voice.`);
+      return;
+    }
+
     // Translate text if needed
     const textToSpeak = await translateText(text);
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     
-    // Find appropriate voice for the selected language
-    const langCodeMap: Record<string, string> = {
-      en: 'en',
-      es: 'es',
-      fr: 'fr',
-      de: 'de',
-      pt: 'pt',
-      zh: 'zh',
-      ja: 'ja',
-      th: 'th',
-    };
+    // Use the currently selected voice (already synced to language)
+    const voiceToUse = voices.find(v => v.voice.name === selectedVoice)?.voice;
     
-    const targetLangCode = langCodeMap[selectedLanguage] || 'en';
-    
-    // Try to find a voice matching the target language
-    let voiceToUse: SpeechSynthesisVoice | undefined;
-    
-    if (selectedLanguage !== 'en') {
-      // Find a voice that matches the target language
-      const langVoice = voices.find(v => v.voice.lang.startsWith(targetLangCode));
-      if (langVoice) {
-        voiceToUse = langVoice.voice;
-      } else {
-        // No matching voice found - warn user
-        toast.warning(`No ${LANGUAGES.find(l => l.code === selectedLanguage)?.name} voice available. Using default voice.`);
-      }
+    if (voiceToUse) {
+      utterance.voice = voiceToUse;
     }
-    
-    // Fall back to selected voice if no language-specific voice found
-    if (!voiceToUse) {
-      voiceToUse = voices.find(v => v.voice.name === selectedVoice)?.voice;
-    }
-    
-    if (voiceToUse) utterance.voice = voiceToUse;
     utterance.rate = rate;
     
     // Set the language on the utterance for better pronunciation
@@ -213,7 +228,7 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
       console.error("Speech synthesis error:", event);
       setIsPlaying(false);
       setIsPaused(false);
-      toast.error("Failed to play audio. Try a different language or voice.");
+      toast.error("Failed to play audio. This voice may not support the selected language.");
     };
 
     utteranceRef.current = utterance;
@@ -468,10 +483,27 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
             onValueChange={setSelectedVoice}
             disabled={isPlaying}
           >
-            <SelectTrigger className="w-[180px] h-8 text-xs">
+            <SelectTrigger className="w-[220px] h-8 text-xs">
               <SelectValue placeholder="Select voice" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-[300px]">
+              {/* Show voices for current language first */}
+              {getVoicesForLanguage(langCodeMap[selectedLanguage] || 'en').length > 0 && (
+                <>
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">
+                    {LANGUAGES.find(l => l.code === selectedLanguage)?.name} Voices
+                  </div>
+                  {getVoicesForLanguage(langCodeMap[selectedLanguage] || 'en').map((v) => (
+                    <SelectItem key={v.voice.name} value={v.voice.name} className="text-xs">
+                      {v.voice.name}
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+              {/* Show all other voices */}
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 mt-1">
+                All Voices
+              </div>
               {voices.map((v) => (
                 <SelectItem key={v.voice.name} value={v.voice.name} className="text-xs">
                   {v.label}
