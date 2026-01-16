@@ -164,18 +164,56 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
     const textToSpeak = await translateText(text);
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    const voice = voices.find(v => v.voice.name === selectedVoice)?.voice;
-    if (voice) utterance.voice = voice;
+    
+    // Find appropriate voice for the selected language
+    const langCodeMap: Record<string, string> = {
+      en: 'en',
+      es: 'es',
+      fr: 'fr',
+      de: 'de',
+      pt: 'pt',
+      zh: 'zh',
+      ja: 'ja',
+      th: 'th',
+    };
+    
+    const targetLangCode = langCodeMap[selectedLanguage] || 'en';
+    
+    // Try to find a voice matching the target language
+    let voiceToUse: SpeechSynthesisVoice | undefined;
+    
+    if (selectedLanguage !== 'en') {
+      // Find a voice that matches the target language
+      const langVoice = voices.find(v => v.voice.lang.startsWith(targetLangCode));
+      if (langVoice) {
+        voiceToUse = langVoice.voice;
+      } else {
+        // No matching voice found - warn user
+        toast.warning(`No ${LANGUAGES.find(l => l.code === selectedLanguage)?.name} voice available. Using default voice.`);
+      }
+    }
+    
+    // Fall back to selected voice if no language-specific voice found
+    if (!voiceToUse) {
+      voiceToUse = voices.find(v => v.voice.name === selectedVoice)?.voice;
+    }
+    
+    if (voiceToUse) utterance.voice = voiceToUse;
     utterance.rate = rate;
+    
+    // Set the language on the utterance for better pronunciation
+    utterance.lang = targetLangCode;
 
     utterance.onend = () => {
       setIsPlaying(false);
       setIsPaused(false);
     };
 
-    utterance.onerror = () => {
+    utterance.onerror = (event) => {
+      console.error("Speech synthesis error:", event);
       setIsPlaying(false);
       setIsPaused(false);
+      toast.error("Failed to play audio. Try a different language or voice.");
     };
 
     utteranceRef.current = utterance;
