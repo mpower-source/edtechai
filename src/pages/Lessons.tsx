@@ -778,6 +778,13 @@ const Lessons = () => {
                         </p>
                       )}
 
+                      {/* Text-to-Speech Player for lessons with text content */}
+                      {lesson.text_content && (
+                        <div className="mt-3">
+                          <TextToSpeechPlayer text={lesson.text_content} />
+                        </div>
+                      )}
+
                       {/* Mobile only: AI Generation buttons below description */}
                       <div className="flex flex-wrap gap-2 mt-2 md:hidden">
                         <Button

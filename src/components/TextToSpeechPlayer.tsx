@@ -52,30 +52,47 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
   useEffect(() => {
     const loadVoices = () => {
       const availableVoices = speechSynthesis.getVoices();
+      if (availableVoices.length === 0) return; // Wait for voices to load
+      
       const voiceOptions: VoiceInfo[] = availableVoices.map((voice) => ({
         voice,
         label: `${voice.name} (${voice.lang})`,
       }));
       setVoices(voiceOptions);
       
-      // Set default voice (prefer English)
+      // Set default voice (prefer Google English voices, then any English)
       if (voiceOptions.length > 0 && !selectedVoice) {
+        const googleEnglishVoice = voiceOptions.find(v => 
+          v.voice.lang.startsWith('en') && v.voice.name.toLowerCase().includes('google')
+        );
         const englishVoice = voiceOptions.find(v => v.voice.lang.startsWith('en'));
-        setSelectedVoice(englishVoice?.voice.name || voiceOptions[0].voice.name);
+        setSelectedVoice(
+          googleEnglishVoice?.voice.name || 
+          englishVoice?.voice.name || 
+          voiceOptions[0].voice.name
+        );
       }
     };
 
+    // Load voices immediately
     loadVoices();
+    
+    // Also listen for async voice loading (required for Chrome on desktop)
     speechSynthesis.onvoiceschanged = loadVoices;
+    
+    // Some browsers need a small delay
+    const timeoutId = setTimeout(loadVoices, 100);
 
     return () => {
+      clearTimeout(timeoutId);
+      speechSynthesis.onvoiceschanged = null;
       speechSynthesis.cancel();
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
     };
-  }, []);
+  }, [selectedVoice]);
 
   const handlePlayBrowser = () => {
     if (isPaused) {
