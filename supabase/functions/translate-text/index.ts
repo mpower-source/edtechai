@@ -13,6 +13,7 @@ const SUPPORTED_LANGUAGES = {
   pt: "Portuguese",
   zh: "Chinese (Simplified)",
   ja: "Japanese",
+  th: "Thai",
 };
 
 serve(async (req) => {

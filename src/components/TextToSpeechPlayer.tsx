@@ -28,6 +28,7 @@ const LANGUAGES: LanguageOption[] = [
   { code: "pt", name: "Portuguese", nativeName: "Português" },
   { code: "zh", name: "Chinese", nativeName: "中文" },
   { code: "ja", name: "Japanese", nativeName: "日本語" },
+  { code: "th", name: "Thai", nativeName: "ไทย" },
 ];
 
 interface TextToSpeechPlayerProps {
