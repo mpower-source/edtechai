@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Play, Pause, Square, Volume2, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface TextToSpeechPlayerProps {
   text: string;
@@ -120,6 +121,14 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
     setIsLoadingAI(true);
 
     try {
+      // Get user session token for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error("Please sign in to use AI voice.");
+        setIsLoadingAI(false);
+        return;
+      }
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
         {
@@ -127,7 +136,7 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
           headers: {
             "Content-Type": "application/json",
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({ text, voiceId: selectedAIVoice }),
         }
