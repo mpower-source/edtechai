@@ -10,9 +10,25 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Play, Pause, Square, Volume2, Sparkles, Loader2 } from "lucide-react";
+import { Play, Pause, Square, Volume2, Sparkles, Loader2, Languages } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+
+interface LanguageOption {
+  code: string;
+  name: string;
+  nativeName: string;
+}
+
+const LANGUAGES: LanguageOption[] = [
+  { code: "en", name: "English", nativeName: "English" },
+  { code: "es", name: "Spanish", nativeName: "Español" },
+  { code: "fr", name: "French", nativeName: "Français" },
+  { code: "de", name: "German", nativeName: "Deutsch" },
+  { code: "pt", name: "Portuguese", nativeName: "Português" },
+  { code: "zh", name: "Chinese", nativeName: "中文" },
+  { code: "ja", name: "Japanese", nativeName: "日本語" },
+];
 
 interface TextToSpeechPlayerProps {
   text: string;
@@ -46,8 +62,45 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
   const [useAIVoice, setUseAIVoice] = useState(false);
   const [selectedAIVoice, setSelectedAIVoice] = useState<string>(AI_VOICES[0].id);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<string>("en");
+  const [isTranslating, setIsTranslating] = useState(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const translateText = async (textToTranslate: string): Promise<string> => {
+    if (selectedLanguage === "en") {
+      return textToTranslate;
+    }
+
+    setIsTranslating(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/translate-text`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ text: textToTranslate, targetLanguage: selectedLanguage }),
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Translation failed");
+      }
+
+      const data = await response.json();
+      return data.translatedText;
+    } catch (error) {
+      console.error("Translation error:", error);
+      toast.error("Translation failed. Playing in English.");
+      return textToTranslate;
+    } finally {
+      setIsTranslating(false);
+    }
+  };
 
   useEffect(() => {
     const loadVoices = () => {
@@ -94,7 +147,7 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
     };
   }, [selectedVoice]);
 
-  const handlePlayBrowser = () => {
+  const handlePlayBrowser = async () => {
     if (isPaused) {
       speechSynthesis.resume();
       setIsPaused(false);
@@ -106,7 +159,10 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
 
     speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    // Translate text if needed
+    const textToSpeak = await translateText(text);
+
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
     const voice = voices.find(v => v.voice.name === selectedVoice)?.voice;
     if (voice) utterance.voice = voice;
     utterance.rate = rate;
@@ -146,6 +202,9 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
         return;
       }
 
+      // Translate text if needed
+      const textToSpeak = await translateText(text);
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
         {
@@ -155,7 +214,7 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ text, voiceId: selectedAIVoice }),
+          body: JSON.stringify({ text: textToSpeak, voiceId: selectedAIVoice }),
         }
       );
 
@@ -259,6 +318,9 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
     );
   }
 
+  const isLoading = isLoadingAI || isTranslating;
+  const loadingText = isTranslating ? "Translating..." : "Loading...";
+
   return (
     <div className={`flex flex-col gap-3 p-3 bg-muted/50 rounded-lg ${className}`}>
       {/* Header with AI toggle */}
@@ -275,7 +337,7 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
             id="ai-voice"
             checked={useAIVoice}
             onCheckedChange={handleVoiceToggle}
-            disabled={isPlaying || isLoadingAI}
+            disabled={isPlaying || isLoading}
           />
           {useAIVoice && <Sparkles className="h-3 w-3 text-primary" />}
         </div>
@@ -289,15 +351,15 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
               variant="outline"
               size="sm"
               onClick={handlePlay}
-              disabled={!text.trim() || isLoadingAI}
+              disabled={!text.trim() || isLoading}
               className="h-8"
             >
-              {isLoadingAI ? (
+              {isLoading ? (
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
               ) : (
                 <Play className="h-3 w-3 mr-1" />
               )}
-              {isLoadingAI ? "Loading..." : isPaused ? "Resume" : "Play"}
+              {isLoading ? loadingText : isPaused ? "Resume" : "Play"}
             </Button>
           ) : (
             <Button
@@ -324,12 +386,31 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
           )}
         </div>
 
+        {/* Language selector */}
+        <Select 
+          value={selectedLanguage} 
+          onValueChange={setSelectedLanguage}
+          disabled={isPlaying || isLoading}
+        >
+          <SelectTrigger className="w-[130px] h-8 text-xs">
+            <Languages className="h-3 w-3 mr-1" />
+            <SelectValue placeholder="Language" />
+          </SelectTrigger>
+          <SelectContent>
+            {LANGUAGES.map((lang) => (
+              <SelectItem key={lang.code} value={lang.code} className="text-xs">
+                {lang.nativeName} ({lang.name})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         {/* Voice selector - different for AI vs Browser */}
         {useAIVoice ? (
           <Select 
             value={selectedAIVoice} 
             onValueChange={setSelectedAIVoice}
-            disabled={isPlaying || isLoadingAI}
+            disabled={isPlaying || isLoading}
           >
             <SelectTrigger className="w-[160px] h-8 text-xs">
               <SelectValue placeholder="Select AI voice" />
@@ -370,13 +451,19 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
             max={2}
             step={0.1}
             className="w-20"
-            disabled={isLoadingAI}
+            disabled={isLoading}
           />
           <span className="text-xs text-muted-foreground w-8">{rate}x</span>
         </div>
       </div>
 
-      {/* AI voice info */}
+      {/* Info messages */}
+      {selectedLanguage !== "en" && (
+        <p className="text-xs text-muted-foreground">
+          <Languages className="h-3 w-3 inline mr-1" />
+          Text will be translated to {LANGUAGES.find(l => l.code === selectedLanguage)?.name} before playing.
+        </p>
+      )}
       {useAIVoice && (
         <p className="text-xs text-muted-foreground">
           <Sparkles className="h-3 w-3 inline mr-1" />
