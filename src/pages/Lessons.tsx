@@ -636,7 +636,7 @@ const Lessons = () => {
                       key={lesson.id}
                       className="relative flex flex-col md:flex-row md:items-start md:justify-between p-4 border border-border rounded-lg hover:bg-accent/50 transition-colors"
                     >
-                      {/* Edit/Delete buttons - top right on mobile, inline on desktop */}
+                      {/* Edit/Delete buttons - top right on mobile only */}
                       <div className="absolute top-2 right-2 flex gap-1 md:hidden">
                         <Button
                           variant="outline"
@@ -679,19 +679,15 @@ const Lessons = () => {
                           onClick={() => handleGenerateContent(lesson, 'text')}
                           disabled={generatingContent?.lessonId === lesson.id}
                         >
-                          {generatingContent?.type === 'text' && generatingContent?.lessonId === lesson.id 
-                            ? "Generating..." 
-                            : "Text"}
+                          Text
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleRecordClick(lesson)}
                           disabled={generatingScript === lesson.id}
-                          title="Record video"
                         >
-                          <Camera className="h-4 w-4 mr-1" />
-                          {generatingScript === lesson.id ? "Generating Script..." : "Record"}
+                          Record
                         </Button>
                         <Button
                           variant="outline"
@@ -699,10 +695,7 @@ const Lessons = () => {
                           onClick={() => handleGenerateContent(lesson, 'quiz')}
                           disabled={generatingContent?.lessonId === lesson.id}
                         >
-                          <ClipboardList className="h-4 w-4 mr-1" />
-                          {generatingContent?.type === 'quiz' && generatingContent?.lessonId === lesson.id 
-                            ? "Generating..." 
-                            : "Quiz"}
+                          Quiz
                         </Button>
                         <Button
                           variant="outline"
@@ -710,10 +703,7 @@ const Lessons = () => {
                           onClick={() => handleGenerateContent(lesson, 'assignment')}
                           disabled={generatingContent?.lessonId === lesson.id}
                         >
-                          <FileText className="h-4 w-4 mr-1" />
-                          {generatingContent?.type === 'assignment' && generatingContent?.lessonId === lesson.id 
-                            ? "Generating..." 
-                            : "Assignment"}
+                          Assignment
                         </Button>
                         <Button
                           variant="outline"
@@ -721,10 +711,7 @@ const Lessons = () => {
                           onClick={() => handleGenerateContent(lesson, 'video')}
                           disabled={generatingContent?.lessonId === lesson.id}
                         >
-                          <Video className="h-4 w-4 mr-1" />
-                          {generatingContent?.type === 'video' && generatingContent?.lessonId === lesson.id 
-                            ? "Generating..." 
-                            : "Video"}
+                          Video
                         </Button>
                         {/* Edit/Delete buttons - hidden on mobile, shown on desktop */}
                         <div className="hidden md:flex gap-2">
