@@ -665,6 +665,12 @@ const Lessons = () => {
                               {lesson.title}
                             </h3>
                           </div>
+                          {/* Description - mobile only, below title */}
+                          {lesson.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-2 mt-1 md:hidden">
+                              {lesson.description}
+                            </p>
+                          )}
                         </div>
 
                         {/* AI Generation buttons - inline on desktop */}
@@ -729,9 +735,9 @@ const Lessons = () => {
                         </div>
                       </div>
                       
-                      {/* Description - full width below title and buttons */}
+                      {/* Description - desktop only, full width below */}
                       {lesson.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-2 mt-2">
+                        <p className="hidden md:block text-sm text-muted-foreground line-clamp-2 mt-2">
                           {lesson.description}
                         </p>
                       )}
