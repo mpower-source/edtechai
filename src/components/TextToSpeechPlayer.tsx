@@ -400,8 +400,40 @@ export const TextToSpeechPlayer = ({ text, className = "" }: TextToSpeechPlayerP
   const handleRateChange = (value: number[]) => {
     const newRate = value[0];
     setRate(newRate);
+    
+    // Update AI audio playback rate immediately
     if (audioRef.current) {
       audioRef.current.playbackRate = newRate;
+    }
+    
+    // For browser voice, restart speech with new rate if currently playing
+    if (!useAIVoice && isPlaying && translatedTextRef.current) {
+      speechSynthesis.cancel();
+      // Create new utterance with updated rate
+      const targetLangCode = langCodeMap[selectedLanguage] || 'en';
+      const utterance = new SpeechSynthesisUtterance(translatedTextRef.current);
+      const voiceToUse = voices.find(v => v.voice.name === selectedVoice)?.voice;
+      if (voiceToUse) {
+        utterance.voice = voiceToUse;
+      }
+      utterance.rate = newRate;
+      utterance.lang = targetLangCode;
+      
+      utterance.onend = () => {
+        setIsPlaying(false);
+        setIsPaused(false);
+      };
+      
+      utterance.onerror = (event) => {
+        if (event.error !== 'canceled' && event.error !== 'interrupted') {
+          toast.error("Failed to play audio. Try a different voice or language.");
+        }
+        setIsPlaying(false);
+        setIsPaused(false);
+      };
+      
+      utteranceRef.current = utterance;
+      speechSynthesis.speak(utterance);
     }
   };
 
