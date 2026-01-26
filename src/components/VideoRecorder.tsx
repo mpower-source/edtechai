@@ -541,6 +541,15 @@ export const VideoRecorder = ({
       setVideoDuration(duration);
       setTrimEnd((prev) => (prev > 0 ? prev : duration));
       console.log('[VideoRecorder] Set videoDuration to:', duration);
+    } else {
+      // Handle Infinity or invalid duration from some WebM recordings
+      console.warn('[VideoRecorder] Invalid duration detected, using recordingTime fallback');
+      // Use the recording time as fallback
+      if (recordingTime > 0) {
+        setVideoDuration(recordingTime);
+        setTrimEnd(recordingTime);
+        console.log('[VideoRecorder] Set videoDuration from recordingTime:', recordingTime);
+      }
     }
 
     v.currentTime = 0;
