@@ -1349,21 +1349,30 @@ export const VideoRecorder = ({
                   </Button>
                 )}
                 <Button 
-                  onClick={() => setIsTrimMode(!isTrimMode)} 
+                  onClick={() => {
+                    const newTrimMode = !isTrimMode;
+                    setIsTrimMode(newTrimMode);
+                    if (newTrimMode) {
+                      toast({
+                        title: "Trim mode enabled",
+                        description: "Adjust the start and end points, then click Download or Upload to apply the trim.",
+                      });
+                    }
+                  }} 
                   variant={isTrimMode ? "default" : "outline"}
                   disabled={isTrimming || !!playbackError}
                 >
                   <Scissors className="h-4 w-4 mr-2" />
-                  {isTrimMode ? "Done Trimming" : "Trim"}
+                  {isTrimMode ? "Exit Trim Mode" : "Trim"}
                 </Button>
                 <Button onClick={handleDownload} variant="outline" disabled={isTrimming || uploading}>
                   <Download className="h-4 w-4 mr-2" />
-                  {isTrimming ? "Processing..." : "Download"}
+                  {isTrimming ? "Processing..." : isTrimMode ? "Download Trimmed" : "Download"}
                 </Button>
                 {lessonId && (
                   <Button onClick={handleUpload} disabled={uploading || isTrimming || !!playbackError}>
                     <Upload className="h-4 w-4 mr-2" />
-                    {uploading ? "Uploading..." : isTrimming ? "Processing..." : "Upload to Lesson"}
+                    {uploading ? "Uploading..." : isTrimming ? "Processing..." : isTrimMode ? "Upload Trimmed" : "Upload to Lesson"}
                   </Button>
                 )}
                 <Button onClick={resetRecording} variant="ghost" disabled={isTrimming || uploading || isFixingPlayback}>
