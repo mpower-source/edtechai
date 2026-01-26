@@ -536,9 +536,11 @@ export const VideoRecorder = ({
     setPlaybackError(null);
 
     const duration = v.duration;
+    console.log('[VideoRecorder] Video loaded, duration:', duration);
     if (isFinite(duration) && duration > 0) {
       setVideoDuration(duration);
       setTrimEnd((prev) => (prev > 0 ? prev : duration));
+      console.log('[VideoRecorder] Set videoDuration to:', duration);
     }
 
     v.currentTime = 0;
@@ -972,6 +974,7 @@ export const VideoRecorder = ({
 
   const handleUpload = useCallback(async () => {
     if (!recordedBlob || !lessonId) {
+      console.error('[VideoRecorder] Upload failed: missing recordedBlob or lessonId');
       toast({
         title: "Cannot upload",
         description: "No video recorded or lesson not selected.",
@@ -987,9 +990,11 @@ export const VideoRecorder = ({
       if (!blobToUpload) throw new Error("Failed to process video");
       
       const { data: { user } } = await supabase.auth.getUser();
+      console.log('[VideoRecorder] Uploading as user:', user?.id);
       if (!user) throw new Error("Not authenticated");
       
       const fileName = `${user.id}/${lessonId}/${Date.now()}.${recordedFileExt}`;
+      console.log('[VideoRecorder] Upload fileName:', fileName);
 
       const { error: uploadError } = await supabase.storage
         .from('lesson-videos')
@@ -998,18 +1003,26 @@ export const VideoRecorder = ({
           upsert: true,
         });
       
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('[VideoRecorder] Upload error:', uploadError);
+        throw uploadError;
+      }
       
       const { data: { publicUrl } } = supabase.storage
         .from('lesson-videos')
         .getPublicUrl(fileName);
+      
+      console.log('[VideoRecorder] Upload successful, publicUrl:', publicUrl);
       
       const { error: updateError } = await supabase
         .from('lessons')
         .update({ video_url: publicUrl })
         .eq('id', lessonId);
       
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('[VideoRecorder] Database update error:', updateError);
+        throw updateError;
+      }
 
       // Prevent cleanup from restoring the previous URL once upload succeeded
       hasUploadedRef.current = true;
@@ -1351,6 +1364,12 @@ export const VideoRecorder = ({
                 <Button 
                   onClick={() => {
                     const newTrimMode = !isTrimMode;
+                    console.log('[VideoRecorder] Toggling trim mode:', {
+                      newTrimMode,
+                      videoDuration,
+                      playbackError,
+                      recordedUrl: !!recordedUrl
+                    });
                     setIsTrimMode(newTrimMode);
                     if (newTrimMode) {
                       toast({
