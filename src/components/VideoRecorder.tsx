@@ -560,29 +560,37 @@ export const VideoRecorder = ({
     setPlaybackError(null);
     
     try {
-      // Create a video element to decode the original
       const video = document.createElement('video');
       video.src = recordedUrl!;
       video.muted = true;
       video.playsInline = true;
-      video.setAttribute('playsinline', ''); // iOS Safari
-      video.setAttribute('webkit-playsinline', ''); // Older iOS
-      video.crossOrigin = 'anonymous';
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      video.preload = 'auto';
       
+      // Wait for video to be ready
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error("Video decode timeout")), 15000);
-        video.onloadedmetadata = () => {
+        
+        const onCanPlay = () => {
           clearTimeout(timeout);
+          video.removeEventListener('canplaythrough', onCanPlay);
+          video.removeEventListener('error', onError);
           resolve();
         };
-        video.onerror = () => {
+        
+        const onError = () => {
           clearTimeout(timeout);
+          video.removeEventListener('canplaythrough', onCanPlay);
+          video.removeEventListener('error', onError);
           reject(new Error("Could not decode video"));
         };
+        
+        video.addEventListener('canplaythrough', onCanPlay);
+        video.addEventListener('error', onError);
         video.load();
       });
       
-      // Set up canvas for re-encoding
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
@@ -618,33 +626,53 @@ export const VideoRecorder = ({
       const duration = video.duration;
       
       await new Promise<void>((resolve, reject) => {
-        mediaRecorder.onstop = () => resolve();
-        mediaRecorder.onerror = () => reject(new Error("MediaRecorder error"));
+        let resolved = false;
+        
+        mediaRecorder.onstop = () => {
+          if (!resolved) {
+            resolved = true;
+            resolve();
+          }
+        };
+        
+        mediaRecorder.onerror = () => {
+          if (!resolved) {
+            resolved = true;
+            reject(new Error("MediaRecorder error"));
+          }
+        };
         
         video.currentTime = 0;
         
-        // Use both seeked and fallback for mobile compatibility
         let started = false;
-        const startRecording = () => {
+        const startRecording = async () => {
           if (started) return;
           started = true;
           
           mediaRecorder.start(100);
           
-          const playPromise = video.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(() => {
-              video.muted = true;
-              video.play().catch(err => {
-                console.error("Video play failed:", err);
-                mediaRecorder.stop();
-              });
-            });
+          try {
+            await video.play();
+          } catch (err) {
+            console.error("Video play failed:", err);
+            if (mediaRecorder.state === 'recording') {
+              mediaRecorder.stop();
+            }
+            return;
           }
           
           const drawFrame = () => {
-            if (video.ended || video.currentTime >= duration || video.paused) {
+            if (video.ended || video.currentTime >= duration) {
               video.pause();
+              if (mediaRecorder.state === 'recording') {
+                try {
+                  mediaRecorder.requestData?.();
+                } catch (e) {}
+                mediaRecorder.stop();
+              }
+              return;
+            }
+            if (video.paused) {
               if (mediaRecorder.state === 'recording') {
                 mediaRecorder.stop();
               }
@@ -657,22 +685,23 @@ export const VideoRecorder = ({
           drawFrame();
         };
         
-        video.onseeked = startRecording;
+        video.onseeked = () => startRecording();
         
-        // Fallback for mobile where onseeked may not fire
+        // Fallback if onseeked doesn't fire
         setTimeout(() => {
-          if (!started && video.currentTime === 0) {
+          if (!started) {
+            console.log("Fallback: starting fix playback without seeked event");
             startRecording();
           }
-        }, 500);
+        }, 1000);
         
         // Safety timeout
         setTimeout(() => {
-          if (mediaRecorder.state === 'recording') {
+          if (!resolved && mediaRecorder.state === 'recording') {
             video.pause();
             mediaRecorder.stop();
           }
-        }, (duration + 3) * 1000);
+        }, (duration + 5) * 1000);
       });
       
       const newBlob = new Blob(chunks, { type: selectedMimeType });
@@ -681,7 +710,6 @@ export const VideoRecorder = ({
         throw new Error("Re-encoding produced empty video");
       }
       
-      // Clean up old URL
       if (recordedUrl) {
         URL.revokeObjectURL(recordedUrl);
       }
@@ -749,23 +777,33 @@ export const VideoRecorder = ({
     try {
       const video = document.createElement('video');
       video.src = recordedUrl;
-      video.muted = true;
-      video.playsInline = true; // Critical for mobile
-      video.setAttribute('playsinline', ''); // iOS Safari
-      video.setAttribute('webkit-playsinline', ''); // Older iOS
-      video.crossOrigin = 'anonymous';
+      video.muted = false; // Need audio for captureStream
+      video.playsInline = true;
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      // Don't set crossOrigin for blob URLs - it causes issues
+      video.preload = 'auto';
 
-      // Wait for metadata with timeout
+      // Wait for video to be fully loaded and ready to play
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error("Video load timeout")), 15000);
-        video.onloadedmetadata = () => {
+        
+        const onCanPlay = () => {
           clearTimeout(timeout);
+          video.removeEventListener('canplaythrough', onCanPlay);
+          video.removeEventListener('error', onError);
           resolve();
         };
-        video.onerror = () => {
+        
+        const onError = () => {
           clearTimeout(timeout);
+          video.removeEventListener('canplaythrough', onCanPlay);
+          video.removeEventListener('error', onError);
           reject(new Error("Failed to load video for trimming"));
         };
+        
+        video.addEventListener('canplaythrough', onCanPlay);
+        video.addEventListener('error', onError);
         video.load();
       });
 
@@ -774,7 +812,27 @@ export const VideoRecorder = ({
       canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d')!;
 
+      // Create combined stream with video from canvas and audio from video element
       const canvasStream = canvas.captureStream(30);
+      
+      // Try to capture audio from the video element
+      let combinedStream: MediaStream;
+      try {
+        // Some browsers support captureStream on video elements
+        const videoStream = (video as any).captureStream ? (video as any).captureStream() : null;
+        if (videoStream) {
+          const audioTracks = videoStream.getAudioTracks();
+          if (audioTracks.length > 0) {
+            // Add audio tracks to canvas stream
+            audioTracks.forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
+          }
+        }
+        combinedStream = canvasStream;
+      } catch (e) {
+        // If audio capture fails, continue with video only
+        console.warn("Could not capture audio for trimming:", e);
+        combinedStream = canvasStream;
+      }
 
       const trimMimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
         ? "video/webm;codecs=vp9,opus"
@@ -782,7 +840,7 @@ export const VideoRecorder = ({
           ? "video/webm;codecs=vp8,opus"
           : "video/webm";
 
-      const mediaRecorder = new MediaRecorder(canvasStream, trimMimeType ? { mimeType: trimMimeType } : undefined);
+      const mediaRecorder = new MediaRecorder(combinedStream, { mimeType: trimMimeType });
 
       const chunks: Blob[] = [];
       mediaRecorder.ondataavailable = (e) => {
@@ -792,7 +850,11 @@ export const VideoRecorder = ({
       const trimDuration = trimEnd - trimStart;
       
       return new Promise((resolve, reject) => {
+        let resolved = false;
+        
         mediaRecorder.onstop = () => {
+          if (resolved) return;
+          resolved = true;
           const trimmedBlob = new Blob(chunks, { type: 'video/webm' });
           if (trimmedBlob.size === 0) {
             reject(new Error("Trimmed video is empty"));
@@ -801,36 +863,47 @@ export const VideoRecorder = ({
           }
         };
         
-        mediaRecorder.onerror = (e) => {
+        mediaRecorder.onerror = () => {
+          if (resolved) return;
+          resolved = true;
           reject(new Error("MediaRecorder error during trimming"));
         };
         
         // Seek to start position
         video.currentTime = trimStart;
         
-        // Use both seeked and timeupdate for mobile compatibility
-        let seeked = false;
-        const startRecording = () => {
-          if (seeked) return;
-          seeked = true;
+        let started = false;
+        const startRecording = async () => {
+          if (started) return;
+          started = true;
           
-          mediaRecorder.start(100); // Collect data every 100ms for better mobile support
+          mediaRecorder.start(100);
           
-          const playPromise = video.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(() => {
-              // Autoplay blocked - try muted play
-              video.muted = true;
-              video.play().catch(err => {
-                console.error("Video play failed:", err);
-                mediaRecorder.stop();
-              });
-            });
+          // Mute for autoplay policy, then try to play
+          video.muted = true;
+          try {
+            await video.play();
+          } catch (err) {
+            console.error("Video play failed:", err);
+            if (mediaRecorder.state === 'recording') {
+              mediaRecorder.stop();
+            }
+            return;
           }
           
           const drawFrame = () => {
-            if (video.currentTime >= trimEnd || video.ended || video.paused) {
+            if (video.currentTime >= trimEnd || video.ended) {
               video.pause();
+              if (mediaRecorder.state === 'recording') {
+                try {
+                  mediaRecorder.requestData?.();
+                } catch (e) {}
+                mediaRecorder.stop();
+              }
+              return;
+            }
+            if (video.paused) {
+              // Video got paused unexpectedly, stop recording
               if (mediaRecorder.state === 'recording') {
                 mediaRecorder.stop();
               }
@@ -843,22 +916,23 @@ export const VideoRecorder = ({
           drawFrame();
         };
         
-        video.onseeked = startRecording;
+        video.onseeked = () => startRecording();
         
-        // Fallback for mobile where onseeked may not fire
+        // Fallback if onseeked doesn't fire (some browsers)
         setTimeout(() => {
-          if (!seeked && Math.abs(video.currentTime - trimStart) < 1) {
+          if (!started) {
+            console.log("Fallback: starting recording without seeked event");
             startRecording();
           }
-        }, 500);
+        }, 1000);
         
         // Safety timeout
         setTimeout(() => {
-          if (mediaRecorder.state === 'recording') {
+          if (!resolved && mediaRecorder.state === 'recording') {
             video.pause();
             mediaRecorder.stop();
           }
-        }, (trimDuration + 3) * 1000);
+        }, (trimDuration + 5) * 1000);
       });
     } catch (error: any) {
       console.error('Trim error:', error);
