@@ -1,0 +1,30 @@
+name: Bug report
+description: Report a bug to help us improve
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to ...
+        2. Click on ...
+        3. See error ...
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: e.g., Node 20, Chrome 121, macOS 14
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      render: shell
