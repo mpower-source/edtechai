@@ -14,6 +14,8 @@ import Cohorts from "./pages/Cohorts";
 import Analytics from "./pages/Analytics";
 import Competitors from "./pages/Competitors";
 import NotFound from "./pages/NotFound";
+import { ProtectedRoute } from "./auth/ProtectedRoute";
+import Profile from "./pages/Profile";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +36,7 @@ const App = () => (
           <Route path="/cohorts" element={<Cohorts />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/competitors" element={<Competitors />} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
