@@ -14,6 +14,7 @@ import Cohorts from "./pages/Cohorts";
 import Analytics from "./pages/Analytics";
 import Competitors from "./pages/Competitors";
 import NotFound from "./pages/NotFound";
+import DarkModeToggle from "./components/DarkModeToggle";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ const App = () => (
           <Route path="/competitors" element={<Competitors />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <DarkModeToggle />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
