@@ -1,73 +1,40 @@
-# Welcome to your Lovable project
+## Local Development
 
-## Project info
+Prerequisites:
+- Node.js 20.x and npm 10+
+- Git
 
-**URL**: https://lovable.dev/projects/d470f34a-7212-4dfe-a623-74442dd852db
+Setup:
+1. Clone the repo
+   git clone https://github.com/mpower-source/edtechai.git
+   cd edtechai
+2. Install dependencies
+   npm ci
+3. Configure environment
+   cp .env.example .env
+   # Fill in values for your environment (see Environment Variables below)
+4. Start the dev server
+   npm run dev
+5. Open http://localhost:5173
 
-## How can I edit this code?
+Common scripts:
+- npm run dev: Start Vite dev server
+- npm run build: Production build
+- npm run preview: Preview production build
+- npm run lint: Lint the codebase (if configured)
 
-There are several ways of editing your application.
+## Environment Variables
 
-**Use Lovable**
+Vite exposes only variables prefixed with VITE_. Place them in a .env file at the project root.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/d470f34a-7212-4dfe-a623-74442dd852db) and start prompting.
+Required/optional variables:
+- VITE_API_URL: Base URL of your API (optional if not using a backend yet)
+- VITE_SUPABASE_URL: Your Supabase project URL (required if using Supabase)
+- VITE_SUPABASE_ANON_KEY: Your Supabase anon key (required if using Supabase)
 
-Changes made via Lovable will be committed automatically to this repo.
+Notes:
+- Never commit real secrets. Use .env locally and deployment-specific secret managers in CI/CD.
+- You can create other variables as needed, but they must start with VITE_.
 
-**Use your preferred IDE**
+---
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/d470f34a-7212-4dfe-a623-74442dd852db) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
